@@ -1,6 +1,9 @@
-get_id_regex <- function(id_pt) {
+get_id_regex <- function(spo_pat) {
+  # stri_match_first(c('breakfast=eggs;lunch=pizza',
+  #                    'breakfast=bacon;lunch=spaghetti', "breakfast=", 'no food here'),
+  #                  regex = '(?<when>\\w+)=?(?<what>\\w+)?')
   stri_replace_all(
-    id_pt,
+    spo_pat,
     regex = "0",
     replacement = "\\\\d"
   ) |>
@@ -77,12 +80,12 @@ parse_waves_yaml <- function(fpa_yaml = "_waves.yml") {
     "palp_fpa",
     "palv_fdr",
     "palv_fpa",
-    "id_pt"
+    "spo_pat"
   )
   names(lst_yaml$ref$pass) <- c(
     "fdr",
     "fpa",
-    "id_pt"
+    "spo_pat"
   )
 
   # Even though "simplify = TRUE" is default in read_yaml, NULL parameters are
@@ -115,8 +118,8 @@ parse_waves_yaml <- function(fpa_yaml = "_waves.yml") {
   if (all(simplify_is_null(lst_yaml$ref$pal$palv_fpa))) {
     lst_yaml$ref$pal["palv_fpa"] <- list(NULL)
   }
-  if (all(simplify_is_null(lst_yaml$ref$pal$id_pt))) {
-    lst_yaml$ref$pal["id_pt"] <- list(NULL)
+  if (all(simplify_is_null(lst_yaml$ref$pal$spo_pat))) {
+    lst_yaml$ref$pal["spo_pat"] <- list(NULL)
   }
   # pass
   if (all(simplify_is_null(lst_yaml$ref$pass$fdr))) {
@@ -125,8 +128,8 @@ parse_waves_yaml <- function(fpa_yaml = "_waves.yml") {
   if (all(simplify_is_null(lst_yaml$ref$pass$fpa))) {
     lst_yaml$ref$pass["fpa"] <- list(NULL)
   }
-  if (all(simplify_is_null(lst_yaml$ref$pass$id_pt))) {
-    lst_yaml$ref$pass["id_pt"] <- list(NULL)
+  if (all(simplify_is_null(lst_yaml$ref$pass$spo_pat))) {
+    lst_yaml$ref$pass["spo_pat"] <- list(NULL)
   }
 
   # If !expr tag is used for directory/filepath, then handlers will still return
@@ -178,7 +181,7 @@ parse_waves_yaml <- function(fpa_yaml = "_waves.yml") {
     # WAVES10006 from UWM.
     # lst_yaml$ref$do <- list(
     #   fdr = file.path("not", "a", "real", "path"),
-    #   id_pat = "WAVES00000",
+    #   spo_pat = "WAVES00000",
     #   map_fpa = ""
     # )
     return(lst_yaml)
@@ -269,7 +272,7 @@ parse_waves_yaml <- function(fpa_yaml = "_waves.yml") {
   lst_msg[["site"]] <- format_abort_message(
     lst_msg[["site"]],
     msg_info =
-      "Please define as the string. Will be given to you by WAVES team."
+      "Please define as a string."
   )
 
   ## raw --------------------------------------
@@ -448,21 +451,21 @@ parse_waves_yaml <- function(fpa_yaml = "_waves.yml") {
         )
       }
 
-      #### id_pattern
-      if (length(lst_yaml$ref$pal$id_pt) == 0) {
-        lst_msg[["ref_pal_id_pat"]] <-
-          "activPAL `id_pattern` is not defined."
-      } else if (!any(stri_detect(lst_yaml$ref$pal$id_pt, regex = "0"))) {
-        lst_msg[["ref_pal_id_pat"]] <-
-          "activPAL `id_pattern` contains a string that does not have any number placeholders."
+      #### spo_pattern
+      if (length(lst_yaml$ref$pal$spo_pat) == 0) {
+        lst_msg[["ref_pal_spo_pat"]] <-
+          "activPAL `site_pid_observation_pattern` is not defined."
+      } else if (!any(stri_detect(lst_yaml$ref$pal$spo_pat, regex = "0"))) {
+        lst_msg[["ref_pal_spo_pat"]] <-
+          "activPAL `site_pid_observation_pattern` contains a string that does not have any number placeholders for pid."
       }
-      lst_msg[["ref_pal_id_pat"]] <- format_abort_message(
-        lst_msg[["ref_pal_id_pat"]],
+      lst_msg[["ref_pal_spo_pat"]] <- format_abort_message(
+        lst_msg[["ref_pal_spo_pat"]],
         msg_info =
-          "Please define as one or more strings with '0' as a placeholder for numbers."
+          "Please define as one or more strings with '0' as a placeholder for pid (required) and `9` as a placeholder for observation session (optional)."
       )
 
-      lst_yaml$ref$pal$id_pt <- get_id_regex(lst_yaml$ref$pal$id_pt)
+      lst_yaml$ref$pal$spo_pat <- get_id_regex(lst_yaml$ref$pal$spo_pat)
 
     }
 
@@ -499,20 +502,20 @@ parse_waves_yaml <- function(fpa_yaml = "_waves.yml") {
       }
 
       #### id_pattern
-      if (length(lst_yaml$ref$pass$id_pt) == 0) {
-        lst_msg[["ref_pass_id_pat"]] <-
-          "ActiPass `id_pattern` is not defined."
-      } else if (!any(stri_detect(lst_yaml$ref$pass$id_pt, regex = "0"))) {
-        lst_msg[["ref_pass_id_pat"]] <-
-          "ActiPass `id_pattern` contains a string that does not have any number placeholders."
+      if (length(lst_yaml$ref$pass$spo_pat) == 0) {
+        lst_msg[["ref_pass_spo_pat"]] <-
+          "ActiPass `site_pid_observation_pattern` is not defined."
+      } else if (!any(stri_detect(lst_yaml$ref$pass$spo_pat, regex = "0"))) {
+        lst_msg[["ref_pass_spo_pat"]] <-
+          "ActiPass `site_pid_observation_pattern` contains a string that does not have any number placeholders."
       }
-      lst_msg[["ref_pass_id_pat"]] <- format_abort_message(
-        lst_msg[["ref_pass_id_pat"]],
+      lst_msg[["ref_pass_spo_pat"]] <- format_abort_message(
+        lst_msg[["ref_pass_spo_pat"]],
         msg_info =
           "Please define as one or more strings with '0' as a placeholder for numbers."
       )
 
-      lst_yaml$ref$pass$id_pt <- get_id_regex(lst_yaml$ref$pass$id_pt)
+      lst_yaml$ref$pass$spo_pat <- get_id_regex(lst_yaml$ref$pass$spo_pat)
 
     }
   }

@@ -24,12 +24,12 @@ reference:
     - ~
     events_filepaths:
     - ~
-    id_pattern:
+    site_pid_observation_pattern:
     - ~
   actiPASS:
     directories:
     - ~
     filepaths:
     - ~
-    id_pattern:
+    site_pid_observation_pattern:
     - ~
