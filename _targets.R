@@ -288,7 +288,8 @@ tar_plan(
   ##%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   ##                               CHECK INPUT                              ----
   ##%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-  lst_chk = check_input_ref(lst_ref),
+  lst_chk = check_input_ref(lst_ref,
+                            my_tz = lst_yaml$my_tz),
   ##%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   ##                          METADATA  - SUPPLIED                         ----
   ##%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -308,19 +309,9 @@ tar_plan(
   ##%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   ##                             PROCESS - REFERENCE                        ----
   ##%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-  # LEFT OFF HERE
-  vct_meta_nm = names(lst_meta),
-  tar_file(
-    name = lst_out.ref,
-    command = process_ref_file(
-      lst_meta    = lst_meta,
-      le_ref      = vct_meta_nm,
-      lst_ref     = lst_ref,
-      dir_out.ref = dir_out.ref
-    ),
-    pattern   = map(lst_meta, vct_meta_nm),
-    # iteration = "vector",
-    error     = "null"
+  lst_out.ref = process_ref_file(
+    lst_chk     = lst_chk,
+    dir_out.ref = dir_out.ref
   ),
   ##%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   ##                              PROCESS - GGIR                            ----

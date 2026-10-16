@@ -52,7 +52,6 @@ process_de_id <- function(df_meta) {
 }
 process_meta_ref <- function(lst_chk) {
 
-  lst_chk <- lst_chk[lengths(lst_chk) != 0]
   lst_meta <-
     vector(mode = "list",
            length = length(lst_chk)) |>
@@ -68,19 +67,70 @@ process_meta_ref <- function(lst_chk) {
         "do"  = process_meta_do(lst_chk$do),
         "img" = {}, # TODO
         "pal" = {
-          purrr::pmap(
+          lst_out <- purrr::pmap(
             lst_chk$pal,
-            \(id, fpa_epoch, fpa_event) {tryCatch(
+            \(id, fpa_epoch, fpa_event) {rlang::try_fetch(
               process_meta_ap(id,
                               fpa_epoch,
                               fpa_event),
               error = \(cnd) {cnd}
             )}
           )
+          chk_err <- any(sapply(lst_out, inherits, "error"))
+
+          if (chk_err) {
+
+            lst_error <- lst_out[sapply(lst_out, inherits, "error")]
+            vct_class <- sapply(lst_out, \(x) class(x)[1])
+            chk_same <- uniqueN(vct_class) == 1
+
+            if (chk_same) {
+              cli::cli_abort(
+                message = c(
+                  "Reference activPAL: Some files errored, with all errors being the same.",
+                  "i" = "Below is one of the errors thrown out of {length(lst_error)} errors:"
+                ),
+                parent = lst_error[[1]],
+                call   = rlang::caller_env()
+              )
+            } else if (length(lst_error) <= 5) {
+              # If its <= 5 errors, display them.
+              cli::cli_abort(
+                message = c(
+                  "Reference activPAL: Some files errored.",
+                  "i" = "Below are the errors:",
+                  lapply(lst_error, \(x) c(x$message, x$body, " " = "")) |> unlist()
+                ),
+                call   = rlang::caller_env()
+              )
+            } else {
+              vct_error_type <- unique(vct_class)
+              ind_error <- which(!duplicated(vct_class))
+              lst_message <- vector(mode = "list", length = length(ind_error))
+              for (i in seq_along(ind_error)) {
+                lst_message[[i]] <- c(
+                  ">" = paste0("Error class `", vct_error_type[i], "`:"),
+                  lst_error[[ind_error[i]]]$message,
+                  lst_error[[ind_error[i]]]$body,
+                  " " = ""
+                )
+              }
+              cli::cli_abort(
+                message = c(
+                  "Reference activPAL: Some files errored.",
+                  "i" = "Because multiple types of error were found, only one of each error type are listed below:",
+                  unlist(lst_message)
+                ),
+                call   = rlang::caller_env()
+              )
+            }
+          } else {
+            purrr::list_rbind(lst_out)
+          }
         },
         "pass" = {} # TODO
       )
-    } else if (le_chk) {
+    } else {
       # TODO: Flush out more if people want to add own reference processing
       # functions
       # lst_meta[[le_ref]] <- lst_yaml$ref[[le_ref]]$process_meta_function(
@@ -90,7 +140,6 @@ process_meta_ref <- function(lst_chk) {
       #   ]
       # )
     }
-
   }
 
   return(lst_meta)
@@ -165,20 +214,10 @@ OLDprocess_meta_ref <- function(lst_yaml,
   unlist(lst_meta)
 
 }
-process_meta_do <- function(fpa_do) {
-
-  df <- fread(fpa_do)
-  names(df) <-
-    names(df) |>
-    tolower()
+process_meta_do <- function(df) {
 
   df |>
     mutate(
-      # date = lubridate::mdy(date),
-      # datetime =
-      #   paste0(date, "_", time) |>
-      #   ymd_hms(tz = "America/Los_Angeles") |>
-      #   with_tz(tzone = "UTC"),
       across(
         .cols = c(domain_do, posture_do, intensity3_do, intensity4_do, sedtype_do),
         .fns = tolower
@@ -198,9 +237,6 @@ process_meta_do <- function(fpa_do) {
       chk_steps      = is.integer(steps_do),
       .by = c(site, pid, observation)
     )
-    # arrow::write_parquet(sink = fpa_write)
-
-  # return(fpa_write)
 
 }
 extract_pal_header <- function(fpa) {
@@ -219,21 +255,39 @@ extract_pal_header <- function(fpa) {
 
   # Check if header was included.
   chk_header <- any(
-    !names(lst_header) %in% c("validation_algorithm_wear_time_protocol",
+    !names(lst_header) %in% c("software_tool_name",
+                              "software_tool_version",
+                              "validation_algorithm_name",
+                              "validation_algorithm_version",
+                              "validation_algorithm_wear_time_protocol",
+                              "analysis_algorithm_name",
+                              "analysis_algorithm_version",
+                              "analysis_algorithm_autocorrect_inverted",
                               "analysis_algorithm_minimum_upright_seconds",
                               "analysis_algorithm_minimum_non_upright_seconds")
   )
   if (chk_header) {
-
     cli::cli_abort(
       message = c(
         "{fpa} was not exported with a header."
       ),
-      class = "no_header",
+      class = "waves_pal_no_header",
       call = rlang::caller_env()
     )
-
   }
+
+  # Make usre CREA algorithm was used.
+  chk_crea <- lst_header$analysis_algorithm_name != "CREA"
+  if (chk_crea) {
+    cli::cli_abort(
+      message = c(
+        "{fpa} was not analyzed with the CREA algorithm."
+      ),
+      class = "waves_pal_no_crea",
+      call = rlang::caller_env()
+    )
+  }
+
   lst_header$validation_algorithm_wear_time_protocol <- as.integer(
     lst_header$validation_algorithm_wear_time_protocol
   )
@@ -250,7 +304,7 @@ process_meta_ap <- function(le_id,
                             fpa_epoch,
                             fpa_event) {
 
-  lst_header_epoch <- tryCatch(
+  lst_header_epoch <- rlang::try_fetch(
     extract_pal_header(fpa_epoch),
     rlang_error = \(cnd) {cnd},
     error = \(cnd) {rlang::cnd_entrace(cnd)}
@@ -268,8 +322,8 @@ process_meta_ap <- function(le_id,
   if (chk_epoch_err || chk_event_err) {
 
     # expected error or not?
-    chk_epoch_no_header <- inherits(lst_header_epoch, "no_header")
-    chk_event_no_header <- inherits(lst_header_event, "no_header")
+    chk_epoch_no_header <- inherits(lst_header_epoch, "waves_pal_no_header")
+    chk_event_no_header <- inherits(lst_header_event, "waves_pal_no_header")
     msg_epoch <-
       if (chk_epoch_no_header) (
         c(
@@ -325,6 +379,7 @@ process_meta_ap <- function(le_id,
         msg_epoch,
         msg_event
       ),
+      class  = class(le_condition)[1],
       parent = le_condition,
       call   = rlang::caller_env()
     )
@@ -360,6 +415,9 @@ process_meta_ap <- function(le_id,
     )
   }
 
-  return(lst_header_epoch)
+  lst_header_epoch |>
+    as_tibble() |>
+    mutate(id = le_id,
+           .before = 1)
 
 }

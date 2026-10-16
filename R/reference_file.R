@@ -1,61 +1,109 @@
-process_ref_file <- function(lst_meta,
-                             le_ref,
-                             lst_ref,
+process_ref_file <- function(lst_chk,
                              dir_out.ref) {
 
-  le_ref <-
-    vct_meta_ref |>
-    basename() |>
-    file_path_sans_ext() |>
-    stri_extract(regex = "(?!.*_).+")
-  le_id <-
-    vct_meta_ref |>
-    basename() |>
-    stri_replace(regex       = paste0("_", le_ref, "\\.qs"),
-                 replacement = "")
+  lst_out.ref <-
+    vector(mode = "list",
+           length = length(lst_chk)) |>
+    setNames(names(lst_chk))
 
-  if (le_ref %in% c("do", "img", "pal", "pass")) {
-    switch(
-      le_ref,
-      "do"  = {lst_ref$do}, # No additional processing needed for DO reference files
-      "img" = {}, # No additional processing needed for IMG reference files
-      "pal" = tryCatch(
-        # TODO
-        process_activpal_file(
-          vct_epoch   = lst_yaml$ref$pal$palp_fpa,
-          vct_event   = lst_yaml$ref$pal$palv_fpa,
-          le_id       = le_id,
-          dir_out.ref = dir_out.ref
-        ),
-        error = \(e) e
-      ),
-      "pass" = {} # TODO
-    )
-  } else {
-    # TODO: Flush out more if people want to add own reference processing
-    # functions
-    # lst_yaml$ref[[le_ref]]$process_file_function(
-    #   lst_param <- lst_yaml$ref[[le_ref]][
-    #     !names(lst_yaml$ref[[le_ref]]) %in% c("process_meta_function",
-    #                                           "process_file_function")
-    #   ]
-    # )
+  for (i in seq_along(lst_chk)) {
+
+    le_ref <- names(lst_chk)[i]
+
+    if (le_ref %in% c("do", "img", "pal", "pass")) {
+      lst_out.ref[[le_ref]] <- switch(
+        le_ref,
+        "do"  = {lst_chk$do}, # No additional processing needed for DO reference files
+        "img" = {lst_chk$img}, # No additional processing needed for IMG reference files
+        "pal" = {
+          lst_out <- purrr::pmap(
+            lst_chk$pal,
+            \(id, fpa_epoch, fpa_event) {rlang::try_fetch(
+              process_activpal_file(id,
+                                    fpa_epoch,
+                                    fpa_event,
+                                    dir_out.ref),
+              error = \(cnd) {cnd}
+            )}
+          )
+          chk_err <- any(sapply(lst_out, inherits, "error"))
+
+          if (chk_err) {
+
+            lst_error <- lst_out[sapply(lst_out, inherits, "error")]
+            vct_class <- sapply(lst_out, \(x) class(x)[1])
+            chk_same <- uniqueN(vct_class) == 1
+
+            if (chk_same) {
+              cli::cli_abort(
+                message = c(
+                  "Reference activPAL: Some files errored, with all errors being the same.",
+                  "i" = "Below is one of the errors thrown out of {length(lst_error)} errors:"
+                ),
+                parent = lst_error[[1]],
+                call   = rlang::caller_env()
+              )
+            } else if (length(lst_error) <= 5) {
+              # If its <= 5 errors, display them.
+              cli::cli_abort(
+                message = c(
+                  "Reference activPAL: Some files errored.",
+                  "i" = "Below are the errors:",
+                  lapply(lst_error, \(x) c(x$message, x$body, " " = "")) |> unlist()
+                ),
+                call   = rlang::caller_env()
+              )
+            } else {
+              vct_error_type <- unique(vct_class)
+              ind_error <- which(!duplicated(vct_class))
+              lst_message <- vector(mode = "list", length = length(ind_error))
+              for (i in seq_along(ind_error)) {
+                lst_message[[i]] <- c(
+                  ">" = paste0("Error class `", vct_error_type[i], "`:"),
+                  lst_error[[ind_error[i]]]$message,
+                  lst_error[[ind_error[i]]]$body,
+                  " " = ""
+                )
+              }
+              cli::cli_abort(
+                message = c(
+                  "Reference activPAL: Some files errored.",
+                  "i" = "Because multiple types of error were found, only one of each error type are listed below:",
+                  unlist(lst_message)
+                ),
+                call   = rlang::caller_env()
+              )
+            }
+          } else {
+            unlist(lst_out)
+          }
+        },
+        "pass" = {} # TODO
+      )
+    } else {
+      # TODO: Flush out more if people want to add own reference processing
+      # functions
+      # lst_yaml$ref[[le_ref]]$process_file_function(
+      #   lst_param <- lst_yaml$ref[[le_ref]][
+      #     !names(lst_yaml$ref[[le_ref]]) %in% c("process_meta_function",
+      #                                           "process_file_function")
+      #   ]
+      # )
+    }
   }
 
+  return(lst_out.ref)
+
 }
-process_activpal_file <- function(vct_epoch,
-                                  vct_event,
-                                  le_id,
+process_activpal_file <- function(le_id,
+                                  fpa_epoch,
+                                  fpa_event,
                                   dir_out.ref) {
 
-  message("Processing: ", le_id)
   # EPOCH --------------------------------------------------------------------
   df_epoch <-
     fread(
-      vct_epoch[grep(
-        x = basename(vct_epoch),
-        pattern = le_id
-      )],
+      fpa_epoch,
       sep    = ";",
       header = TRUE,
       skip   = 12
@@ -110,7 +158,7 @@ process_activpal_file <- function(vct_epoch,
     )
 
   if (uniqueN(df_epoch$err_time) > 1) {
-    tar_error(
+    cli::cli_abort(
       message = c(
         "`process_activpal` function:",
         "x" = "Epoch file has a data error. Double-check events file to see what corresponding {.var class_palv} is.",
@@ -118,17 +166,15 @@ process_activpal_file <- function(vct_epoch,
         "i" = glue::glue("ID: {le_id}"),
         "i" = glue::glue("File: {basename(vct_event[le_id])}")
       ),
-      class = "process_activpal"
+      class = "waves_process_pal_epoch",
+      call   = rlang::caller_env()
     )
   }
 
   # EVENT --------------------------------------------------------------------
   df_event <-
     fread(
-      vct_event[grep(
-        x = basename(vct_event),
-        pattern = le_id
-      )],
+      fpa_event,
       sep    = ";",
       header = TRUE,
       skip   = 14,
@@ -202,7 +248,7 @@ process_activpal_file <- function(vct_epoch,
     )
 
   if (anyNA(df_event$event_palv)) {
-    tar_error(
+    cli::cli_abort(
       message = c(
         "`process_activpal` function:",
         "x" = "Events file has NA in events type column after renaming.",
@@ -210,7 +256,8 @@ process_activpal_file <- function(vct_epoch,
         "i" = "ID: {le_id}",
         "i" = "File: {basename(vct_event[le_id])}"
       ),
-      class = "process_activpal"
+      class = "waves_process_pal_event",
+      call   = rlang::caller_env()
     )
   }
 

@@ -179,3 +179,6 @@ strip_all_ext <- function(x) {
   }
   x
 }
+indent_cli_message <- function(x) {
+  setNames(x, nm = rep(" ", times = length(x)))
+}
