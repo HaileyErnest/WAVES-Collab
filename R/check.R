@@ -47,7 +47,7 @@ check_input_ref <- function(lst_ref,
             check_input_pal(
               vct_fpa_palp = lst_ref$pal$palp,
               vct_fpa_palv = lst_ref$pal$palv,
-              id_pt        = lst_ref$pal$id_pt
+              spo_pat      = lst_ref$pal$spo_pat
             ),
             waves_chk_ap_miss  = \(cnd) {cnd},
             waves_chk_ap_id_pt = \(cnd) {cnd},
@@ -107,6 +107,47 @@ check_input_ref <- function(lst_ref,
       call    = rlang::caller_env()
     )
     lapply(lst_chk[vct_error], conditionMessage)
+
+  }
+
+  # If activPAL data is provided alongside direct observation data, check if
+  # "(?<obs>)" was present in site_pid_observation pattern.
+  # If not, we can't do much checking until the merging step. We are assuming
+  # all direct observation sessions occur within the activPAL file, and can only
+  # check that once merging the data.
+  if ("observation" %in% names(lst_chk$pal)) {
+    chk_obs <- !any(
+      unique(lst_chk$pal$observation) %in% unique(lst_chk$do$observation)
+    )
+    chk_spo <- any(
+      lst_chk$do |>
+        count(site, pid, observation) |>
+        unite(col = spo,
+              site, pid, observation,
+              sep = "_") |>
+        pull(spo) !=
+        paste(
+          lst_chk$do$site[1],
+          lst_chk$pal$pid,
+          lst_chk$pal$observation,
+          sep = "_"
+        )
+    )
+
+    # TODO: Figure if chk_obs or chk_spo is better. chk_spo is better
+    # for giving more informative error, but still need to test with UWM
+    # data.
+    if (chk_obs) {
+      cli::cli_abort(
+        message = c(
+          "Observations found from activPAL filenames do not match.",
+          "WAVES team still working on providing which files do not match DO data.",
+          "i" = "Please double-check both direct observation and activPAL data to ensure unique site, pid, and observation combinations match.",
+          "i" = "NOTE: Disregard below text about debugging."
+        ),
+        call = rlang::caller_env()
+      )
+    }
 
   }
 
@@ -245,25 +286,35 @@ check_input_do <- function(fpa_do,
 }
 check_input_pal <- function(vct_fpa_palp,
                             vct_fpa_palv,
-                            id_pt) {
+                            spo_pat) {
   # Extract ids and match files
-  vct_nm_epoch <- stri_extract(
-    basename(vct_fpa_palp),
-    regex = paste0(id_pt, collapse = "|")
-  )
-  vct_nm_event <- stri_extract(
-    basename(vct_fpa_palv),
-    regex = paste0(id_pt, collapse = "|")
-  )
+  mtx_palp <-
+    basename(vct_fpa_palp) |>
+    stri_match(regex = spo_pat[1])
+  colnames(mtx_palp)[1] <- "spo"
+  df_palp <- as_tibble(mtx_palp)
 
-  if (anyNA(c(vct_nm_epoch, vct_nm_event))){
+  mtx_palv <-
+    basename(vct_fpa_palv) |>
+    stri_match(regex = spo_pat[1])
+  colnames(mtx_palv)[1] <- "spo"
+  df_palv <- as_tibble(mtx_palv)
 
-    vct_err_epoch <- basename(vct_fpa_palp)[is.na(vct_nm_epoch)]
-    vct_err_event <- basename(vct_fpa_palv)[is.na(vct_nm_event)]
-    id_pt_pretty <-
+  if ("obs" %in% names(df_palp)) {
+    names(df_palp)[names(df_palp) == "obs"] <- "observation"
+    names(df_palv)[names(df_palv) == "obs"] <- "observation"
+  }
+
+  # If the site_pid_observation from a filename is not extracted properly, then
+  # the entire row will be empty. Just use the first column to check then.
+  if (anyNA(c(df_palp$spo, df_palv$spo))) {
+
+    vct_err_epoch <- basename(vct_fpa_palp)[is.na(df_palp$spo)]
+    vct_err_event <- basename(vct_fpa_palv)[is.na(df_palv$spo)]
+    spo_pat_pretty <-
       sub(
-        x = id_pt,
-        pattern = "\\^|\\\\d",
+        x = spo_pat,
+        pattern = "\\^",
         replacement = ""
       ) |>
       gsub(
@@ -286,11 +337,8 @@ check_input_pal <- function(vct_fpa_palp,
 
   }
 
-  names(vct_fpa_palp) <- vct_nm_epoch
-  names(vct_fpa_palv) <- vct_nm_event
-
-  vct_nomatch_epoch <- setdiff(names(vct_fpa_palv), names(vct_fpa_palp))
-  vct_nomatch_event <- setdiff(names(vct_fpa_palp), names(vct_fpa_palv))
+  vct_nomatch_epoch <- setdiff(df_palv$spo, df_palp$spo)
+  vct_nomatch_event <- setdiff(df_palp$spo, df_palv$spo)
 
   if (length(vct_nomatch_epoch) != 0 || length(vct_nomatch_event) != 0) {
     cli::cli_abort(
@@ -307,10 +355,10 @@ check_input_pal <- function(vct_fpa_palp,
       call = rlang::caller_env()
     )
   } else {
-    tibble(
-      id        = names(vct_fpa_palp),
-      fpa_epoch = vct_fpa_palp,
-      fpa_event = vct_fpa_palv
-    )
+    df_palp |>
+      mutate(
+        fpa_epoch = vct_fpa_palp,
+        fpa_event = vct_fpa_palv
+      )
   }
 }

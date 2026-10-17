@@ -259,11 +259,14 @@ tar_plan(
     do   = lst_yaml$ref$do$fpa,
     img  = lst_yaml$ref$img$fpa,
     pal  = list(
-      palp  = lst_yaml$ref$pal$palp_fpa,
-      palv  = lst_yaml$ref$pal$palv_fpa,
-      id_pt = lst_yaml$ref$pal$id_pt
+      palp    = lst_yaml$ref$pal$palp_fpa,
+      palv    = lst_yaml$ref$pal$palv_fpa,
+      spo_pat = lst_yaml$ref$pal$spo_pat
     ),
-    pass = lst_yaml$ref$pass$fpa
+    pass = list(
+      fpa     = lst_yaml$ref$pass$fpa,
+      spo_pat = lst_yaml$ref$pass$spo_pat
+    )
   ),
   ##%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   ##                             FILE DIRECTORIES                           ----

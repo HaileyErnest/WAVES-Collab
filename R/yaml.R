@@ -451,18 +451,18 @@ parse_waves_yaml <- function(fpa_yaml = "_waves.yml") {
         )
       }
 
-      #### spo_pattern
+      #### site_pid_observation_pattern
       if (length(lst_yaml$ref$pal$spo_pat) == 0) {
         lst_msg[["ref_pal_spo_pat"]] <-
           "activPAL `site_pid_observation_pattern` is not defined."
-      } else if (!any(stri_detect(lst_yaml$ref$pal$spo_pat, regex = "0"))) {
+      } else if (!any(stri_detect(lst_yaml$ref$pal$spo_pat, regex = "\\(\\?\\<pid\\>0*\\)"))) {
         lst_msg[["ref_pal_spo_pat"]] <-
           "activPAL `site_pid_observation_pattern` contains a string that does not have any number placeholders for pid."
       }
       lst_msg[["ref_pal_spo_pat"]] <- format_abort_message(
         lst_msg[["ref_pal_spo_pat"]],
         msg_info =
-          "Please define as one or more strings with '0' as a placeholder for pid (required) and `9` as a placeholder for observation session (optional)."
+          "Please define as one or more strings with '0' as a placeholder for numbers in at least `(?<pid> )` to capture pid."
       )
 
       lst_yaml$ref$pal$spo_pat <- get_id_regex(lst_yaml$ref$pal$spo_pat)
@@ -501,18 +501,18 @@ parse_waves_yaml <- function(fpa_yaml = "_waves.yml") {
         )
       }
 
-      #### id_pattern
+      #### site_pid_observation_pattern
       if (length(lst_yaml$ref$pass$spo_pat) == 0) {
         lst_msg[["ref_pass_spo_pat"]] <-
           "ActiPass `site_pid_observation_pattern` is not defined."
-      } else if (!any(stri_detect(lst_yaml$ref$pass$spo_pat, regex = "0"))) {
+      } else if (!any(stri_detect(lst_yaml$ref$pass$spo_pat, regex = "\\(\\?\\<pid\\>0*\\)"))) {
         lst_msg[["ref_pass_spo_pat"]] <-
-          "ActiPass `site_pid_observation_pattern` contains a string that does not have any number placeholders."
+          "ActiPass `site_pid_observation_pattern` contains a string that does not have any number placeholders for pid."
       }
       lst_msg[["ref_pass_spo_pat"]] <- format_abort_message(
         lst_msg[["ref_pass_spo_pat"]],
         msg_info =
-          "Please define as one or more strings with '0' as a placeholder for numbers."
+          "Please define as one or more strings with '0' as a placeholder for numbers in at least `(?<pid> )` to capture pid."
       )
 
       lst_yaml$ref$pass$spo_pat <- get_id_regex(lst_yaml$ref$pass$spo_pat)

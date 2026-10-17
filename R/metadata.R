@@ -69,8 +69,8 @@ process_meta_ref <- function(lst_chk) {
         "pal" = {
           lst_out <- purrr::pmap(
             lst_chk$pal,
-            \(id, fpa_epoch, fpa_event) {rlang::try_fetch(
-              process_meta_ap(id,
+            \(spo, fpa_epoch, fpa_event, ...) {rlang::try_fetch(
+              process_meta_ap(spo,
                               fpa_epoch,
                               fpa_event),
               error = \(cnd) {cnd}

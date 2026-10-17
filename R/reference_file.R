@@ -18,8 +18,8 @@ process_ref_file <- function(lst_chk,
         "pal" = {
           lst_out <- purrr::pmap(
             lst_chk$pal,
-            \(id, fpa_epoch, fpa_event) {rlang::try_fetch(
-              process_activpal_file(id,
+            \(spo, fpa_epoch, fpa_event, ...) {rlang::try_fetch(
+              process_activpal_file(spo,
                                     fpa_epoch,
                                     fpa_event,
                                     dir_out.ref),
