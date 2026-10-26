@@ -55,13 +55,14 @@ parse_waves_yaml <- function(fpa_yaml = "_waves.yml") {
     "sf",
     "meta_fpa",
     "de_id",
-    "site",
+    "site_deid",
     "raw",
     "ref"
   )
   names(lst_yaml$raw) <- c(
     "fdr",
-    "fpa"
+    "fpa",
+    "spo_pat"
   )
   names(lst_yaml$ref) <- c(
     "do",
@@ -96,6 +97,9 @@ parse_waves_yaml <- function(fpa_yaml = "_waves.yml") {
   }
   if (all(simplify_is_null(lst_yaml$raw$fpa))) {
     lst_yaml$raw["fpa"] <- list(NULL)
+  }
+  if (all(simplify_is_null(lst_yaml$raw$spo_pat))) {
+    lst_yaml$raw["spo_pat"] <- list(NULL)
   }
   # do
   if (all(simplify_is_null(lst_yaml$ref$do$fpa))) {
@@ -261,16 +265,13 @@ parse_waves_yaml <- function(fpa_yaml = "_waves.yml") {
       "Please define as a boolean TRUE or FALSE."
   )
 
-  ## site  -------------------------------------------
-  if (length(lst_yaml$site) == 0) {
-    lst_msg[["site"]] <-
-      "`site` is not defined."
-  } else if (!is.character(lst_yaml$site)) {
-    lst_msg[["site"]] <-
-      "`deidentify` is not a string."
+  ## site_deid  -------------------------------------------
+  if (length(lst_yaml$site_deid) != 0 && !is.character(lst_yaml$site_deid)) {
+    lst_msg[["site_deid"]] <-
+      "`site_deid` is not a string."
   }
-  lst_msg[["site"]] <- format_abort_message(
-    lst_msg[["site"]],
+  lst_msg[["site_deid"]] <- format_abort_message(
+    lst_msg[["site_deid"]],
     msg_info =
       "Please define as a string."
   )
@@ -316,6 +317,23 @@ parse_waves_yaml <- function(fpa_yaml = "_waves.yml") {
       recursive  = FALSE
     )
   }
+
+  ### site_pid_observation_pattern
+  if (length(lst_yaml$raw$spo_pat) == 0) {
+    lst_msg[["raw_spo_pat"]] <-
+      "wrist_accelerometer `site_pid_observation_pattern` is not defined."
+  } else if (!any(stri_detect(lst_yaml$raw$spo_pat, regex = "\\(\\?\\<pid\\>0*\\)"))) {
+    lst_msg[["raw_spo_pat"]] <-
+      "wrist_accelerometer `site_pid_observation_pattern` contains a string that does not have any number placeholders for pid."
+  }
+  lst_msg[["raw_spo_pat"]] <- format_abort_message(
+    lst_msg[["raw_spo_pat"]],
+    msg_info =
+      "Please define as one or more strings with '0' as a placeholder for numbers in at least `(?<pid> )` to capture pid."
+  )
+
+  lst_yaml$raw$spo_pat <- get_id_regex(lst_yaml$raw$spo_pat)
+
 
   ## ref ------------------------------------------
   # Make sure values are present for at least one reference.

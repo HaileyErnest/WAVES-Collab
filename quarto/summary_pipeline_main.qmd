@@ -12,6 +12,7 @@ format:
       x: 1cm
       y: 1cm
     pdf-standard: ua-1
+echo: false
 editor: source
 editor_options: 
   chunk_output_type: console
@@ -19,7 +20,6 @@ editor_options:
 
 ```{r}
 #| label: setup
-#| echo: false
 
 library(targets)
 source("packages.R") |>
@@ -36,8 +36,13 @@ list.files(
        invert  = TRUE) |>
   sapply(FUN = source) |>
   invisible()
-tar_load(lst_yaml)
-tar_load(vct_out.ref)
+tar_load(de_id)
+tar_load(df_pid)
+tar_load(spo_pat_raw)
+# tar_load(spo_pat_ref)
+# tar_load(lst_chk)
+# tar_load(lst_meta)
+# tar_load(lst_out.ref)
 tar_load(vct_raw)
 tar_load(vct_basic)
 tar_load(vct_nw.sleep)
@@ -45,19 +50,17 @@ tar_load(vct_out.cut)
 tar_load(vct_cal)
 tar_load(vct_out.raw)
 tar_load(vct_out.oak.pre)
-tar_load(vct_ox_step)
-tar_load(vct_ox_wlms)
-tar_load(vct_ox_acti)
+tar_load(vct_ox)
+# tar_load(vct_ox_step)
+# tar_load(vct_ox_wlms)
+# tar_load(vct_ox_acti)
 tar_load(vct_merge)
 
-vct_ref <- sapply(
-    lst_yaml$ref,
-    \(x) !all(simplify_is_null(x))
-  )
 len_raw <- length(vct_raw)
-df_out <- summarize_major_main_steps(
-  lst_yaml,
-  vct_out.ref,
+df_out <- summarize_accelerometer_steps(
+  de_id,
+  df_pid,
+  spo_pat_raw,
   vct_raw,
   vct_basic,
   vct_nw.sleep,
@@ -65,9 +68,10 @@ df_out <- summarize_major_main_steps(
   vct_out.raw,
   vct_out.oak.pre,
   vct_out.cut,
-  vct_ox_step,
-  vct_ox_wlms,
-  vct_ox_acti
+  # vct_ox_step,
+  # vct_ox_wlms,
+  # vct_ox_acti
+  vct_ox
 )
 lgl_all <- 
   df_out |> 
@@ -78,55 +82,53 @@ lgl_all <-
     ))
   ) |> 
   pull(all)
-lst_summary <- summarize_metrics_main(lst_yaml,
-                                      vct_ref,
-                                      vct_merge)
+chk_do <- any(
+  stri_detect(vct_merge,
+              regex = "ANCHOR_DO")
+)
+chk_raw <- any(
+  stri_detect(vct_merge,
+              regex = "ANCHOR_RAW")
+)
 
 ```
 
-# Input
+# Accelerometer Major Steps
 
-Out of `r len_raw` raw files, `r sum(lgl_all)` successfully went through the pipeline.
-
-# By Major Steps
+Out of `r len_raw` raw accelerometer files, `r sum(lgl_all)` successfully went through the pipeline.
 
 Below is a table listing if each major step was successful for a file (TRUE) or unsuccessful (FALSE)
 
 ```{r}
 #| label: tbl-major
-#| echo: false
 
 lst_green <- 
   list(
-    if (vct_ref["do"]) {cells_body(columns = DO, rows = DO)},
-    if (vct_ref["pal"]) {cells_body(columns = activPAL, rows = activPAL)},
-    if (vct_ref["pass"]) {cells_body(columns = ActiPass, rows = ActiPass)},
     cells_body(columns = GGIR,          rows = GGIR),
     cells_body(columns = nw.sleep,      rows = nw.sleep),
     cells_body(columns = calibration,   rows = calibration),
     cells_body(columns = `raw methods`, rows = `raw methods`),
     cells_body(columns = oak.pre,       rows = oak.pre),
     cells_body(columns = cutpoints,     rows = cutpoints),
-    cells_body(columns = stepcount,     rows = stepcount),
-    cells_body(columns = walmsley,      rows = walmsley),
-    cells_body(columns = actinet,       rows = actinet)
+    cells_body(columns = oxwearables,   rows = oxwearables)
+    # cells_body(columns = stepcount,     rows = stepcount),
+    # cells_body(columns = walmsley,      rows = walmsley),
+    # cells_body(columns = actinet,       rows = actinet)
   ) |> 
   Filter(x = _,
          f = Negate(is.null))
 lst_red <- 
   list(
-    if (vct_ref["do"]) {cells_body(columns = DO, rows = !DO)},
-    if (vct_ref["pal"]) {cells_body(columns = activPAL, rows = !activPAL)},
-    if (vct_ref["pass"]) {cells_body(columns = ActiPass, rows = !ActiPass)},
     cells_body(columns = GGIR,          rows = !GGIR),
     cells_body(columns = nw.sleep,      rows = !nw.sleep),
     cells_body(columns = calibration,   rows = !calibration),
     cells_body(columns = `raw methods`, rows = !`raw methods`),
     cells_body(columns = oak.pre,       rows = !oak.pre),
     cells_body(columns = cutpoints,     rows = !cutpoints),
-    cells_body(columns = stepcount,     rows = !stepcount),
-    cells_body(columns = walmsley,      rows = !walmsley),
-    cells_body(columns = actinet,       rows = !actinet)
+    cells_body(columns = oxwearables,   rows = !oxwearables)
+    # cells_body(columns = stepcount,     rows = !stepcount),
+    # cells_body(columns = walmsley,      rows = !walmsley),
+    # cells_body(columns = actinet,       rows = !actinet)
   ) |> 
   Filter(x = _,
          f = Negate(is.null))
@@ -142,42 +144,140 @@ gt(df_out) |>
 
 ```
 
-# Totals by Configuration File
-
-If all values are highlighted green, then the WAVES code is running successfully on your computer. If a column or row is highlighted in red, please share this .html file with the WAVES data team for follow up.
-
-## MVPA (minutes)
+# Direct Observation Summary
 
 ```{r}
-#| label: tbl-mvpa_total 
-#| echo: false 
+#| label: do_text
+#| output: asis
+
+if (chk_do) {
+cat("The following tables show, within each observation session:\n
+- The total number of minutes captured by each method that measured physical activity intensity (i.e. the number of minutes where there is available data).\n
+- The total number of minutes captured by each method that measured steps.\n
+- The total number of moderate-to-vigorous minutes estimated by each method.\n
+- The total number of sedentary minutes estimated by each method.\n
+- The total number of steps estimated by each method.\n")
+} else {
+  cat("\n\nNo direct observation data supplied.\n\n")
+}
+```
+
+
+```{r}
+#| label: do_summary
+#| eval: !expr chk_do
+#| output: asis
+
+lst_summary <- summarize_metrics_main(
+    vct_anchor = stri_subset(vct_merge,
+                             regex = "ANCHOR_DO")
+  )
+
+cat("## Available Data: Intensity (minutes)\n\n")
+
+lst_summary$total_session_int3
+
+cat("## Available Data: Steps (minutes)\n\n")
+
+lst_summary$total_session_step
+
+cat("## MVPA (minutes)\n\n")
+
 lst_summary$total_mvpa
 
-```
+cat("## Sedentary (minutes)\n\n")
 
-## Sedentary (minutes)
-
-```{r}
-#| label: tbl-sed_total 
-#| echo: false 
 lst_summary$total_sed
 
-```
+cat("## Steps\n\n")
 
-## Steps
-
-```{r}
-#| label: tbl-step_total 
-#| echo: false 
 lst_summary$total_step
 
 ```
+
+# Free-living Data Summary
+
+```{r}
+#| label: raw_text
+#| output: asis
+
+if (chk_raw) {
+cat("The following tables show, within each free-living session, by date:\n
+- The total number of hours captured by each method that measured physical activity intensity (i.e. the number of minutes where there is available data).\n
+- The total number of hours captured by each method that measured steps.\n
+- The total number of moderate-to-vigorous hours estimated by each method.\n
+- The total number of sedentary hours estimated by each method.\n
+- The total number of steps estimated by each method.\n")
+} else {
+  cat("\n\nNo free-living data supplied.\n\n")
+}
+```
+
+
+```{r}
+#| label: raw_summary
+#| eval: !expr chk_raw
+#| output: asis
+
+lst_summary <- summarize_metrics_main(
+    vct_anchor = stri_subset(vct_merge,
+                             regex = "ANCHOR_RAW")
+  )
+
+cat("## Available Data: Intensity (hours)\n\n")
+
+lst_summary$total_session_int3
+
+cat("## Available Data: Steps (hours)\n\n")
+
+lst_summary$total_session_step
+
+cat("## MVPA (hours)\n\n")
+
+lst_summary$total_mvpa
+
+cat("## Sedentary (hours)\n\n")
+
+lst_summary$total_sed
+
+cat("## Steps\n\n")
+
+lst_summary$total_step
+
+```
+
+
+<!-- ## MVPA (minutes) -->
+
+<!-- ```{r} -->
+<!-- #| label: tbl-mvpa_total  -->
+<!-- #| echo: false  -->
+<!-- lst_summary$total_mvpa -->
+
+<!-- ``` -->
+
+<!-- ## Sedentary (minutes) -->
+
+<!-- ```{r} -->
+<!-- #| label: tbl-sed_total  -->
+<!-- #| echo: false  -->
+<!-- lst_summary$total_sed -->
+
+<!-- ``` -->
+
+<!-- ## Steps -->
+
+<!-- ```{r} -->
+<!-- #| label: tbl-step_total  -->
+<!-- #| echo: false  -->
+<!-- lst_summary$total_step -->
+
+<!-- ``` -->
 
 # tar_meta
 
 ```{r}
 #| label: tar_meta
-#| echo: false
 
 tar_meta(targets_only = TRUE) |> 
   dplyr::filter(type != "branch") |> 

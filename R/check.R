@@ -287,7 +287,7 @@ check_input_do <- function(fpa_do,
 check_input_pal <- function(vct_fpa_palp,
                             vct_fpa_palv,
                             spo_pat) {
-  # Extract ids and match files
+  # Extract site, pid, observation and match files
   mtx_palp <-
     basename(vct_fpa_palp) |>
     stri_match(regex = spo_pat[1])
@@ -356,9 +356,332 @@ check_input_pal <- function(vct_fpa_palp,
     )
   } else {
     df_palp |>
+      unite(col = fnm,
+            any_of(c("site", "pid", "observation")),
+            sep = "_",
+            remove = FALSE) |>
       mutate(
+        pid       = as.integer(pid),
         fpa_epoch = vct_fpa_palp,
         fpa_event = vct_fpa_palv
       )
   }
+}
+#' Determine format of raw files
+#'
+#' @param vct_raw
+#'
+#' @returns
+#' @export
+#'
+#' @examples
+check_raw_type <- function(vct_raw) {
+
+  vct_type <- vector(
+    mode = "character",
+    length = length(vct_raw)
+  )
+
+  for (i in seq_along(vct_raw)) {
+
+    # Determine if input is "happily read by GGIR or if user is providing a
+    # GENEActiv csv file w/ header or a no header csv.
+    # https://github.com/wadpac/GGIR/issues/518
+    I <- suppressWarnings(tryCatch(
+      GGIR::g.inspectfile(
+        datafile = vct_raw[i],
+        params_rawdata =
+          GGIR::extract_params(params2check = "rawdata")[["params_rawdata"]]
+      ),
+      error = \(e) e
+    ))
+
+    if (class(I)[1] == "simpleError") {
+
+      chk_geneactiv_csv <-
+        I$message == "The GENEActiv csv reading functionality is deprecated in GGIR from version 2.6-4 onwards. Please, use either the GENEActiv bin files or try to read the csv files with GGIR::read.myacc.csv"
+
+      if (chk_geneactiv_csv) {
+        vct_type[i] <- "GENEACTIV - CSV w/ HEADER"
+      } else {
+        vct_type[i] <- "UNKNOWN"
+      }
+
+    } else {
+
+      # If GGIR determines its an ad-hoc csv, assume that it will be
+      # GENEActiv csv file without header
+      header_value <- tryCatch(I$header[1, 1], error = \(e) NA_character_)
+      sf_value <- tryCatch(I$sf, error = \(e) NA_real_)
+      chk_adhoc_csv <-
+        identical(header_value, "file does not have header") &&
+        identical(sf_value, 0)
+
+      if (chk_adhoc_csv) {
+        vct_type[i] <- "ADHOC"
+      } else {
+        monn <- tryCatch(I$monn, error = \(e) NA_character_)
+        dformn <- tryCatch(I$dformn, error = \(e) NA_character_)
+
+        if (anyNA(c(monn, dformn))) {
+          vct_type[i] <- "UNKNOWN"
+        } else {
+          vct_type[i] <-
+            paste0(monn, " - ", dformn) |>
+            toupper()
+        }
+      }
+    }
+  }
+
+  vct_type <-
+    # Rename "GENEACTIVE" to "GENEACTIV".
+    sub(
+      x = vct_type,
+      pattern = "GENEACTIVE",
+      replacement = "GENEACTIV"
+    ) |>
+    # name with filename sans extension.
+    setNames(
+      vct_raw |>
+        basename() |>
+        file_path_sans_ext()
+    )
+
+  return(vct_type)
+
+}
+check_input_raw <- function(vct_raw,
+                            spo_pat) {
+  # Extract site, pid, observation and match files
+  mtx_raw <-
+    basename(vct_raw) |>
+    stri_match(regex = spo_pat[1])
+  colnames(mtx_raw)[1] <- "spo"
+  df_raw <- as_tibble(mtx_raw)
+
+  if ("obs" %in% names(df_raw)) names(df_raw)[names(df_raw) == "obs"] <- "observation"
+
+  # If the site_pid_observation from a filename is not extracted properly, then
+  # the entire row will be empty. Just use the first column to check then.
+  if (anyNA(df_raw$spo)) {
+
+    vct_err <- basename(vct_raw)[is.na(df_raw$spo)]
+    spo_pat_pretty <-
+      sub(
+        x = spo_pat,
+        pattern = "\\^",
+        replacement = ""
+      ) |>
+      gsub(
+        x = _,
+        pattern = "\\\\d",
+        replacement = "0"
+      )
+    cli::cli_abort(
+      message = c(
+        "User error with supplied wrist accelerometer data.",
+        "i" = "The following files do not start with supplied {.envvar id_pt} '{id_pt_pretty}':",
+        indent_cli_message(vct_err)
+      ),
+      class = "waves_chk_raw_id_pt",
+      call = rlang::caller_env()
+    )
+
+  }
+
+  df_raw |>
+    unite(col = fnm,
+          any_of(c("site", "pid", "observation")),
+          sep = "_",
+          remove = FALSE) |>
+    mutate(
+      pid     = as.integer(pid),
+      fpa_raw = vct_raw,
+      type    = check_raw_type(fpa_raw)
+    )
+
+}
+check_input_pid <- function(df_meta,
+                            df_chk_raw,
+                            lst_chk,
+                            trial_run) {
+
+  lst_pid <- list(
+    meta =
+      df_meta |>
+      as_tibble() |>
+      mutate(
+        site_deid,
+        pid_deid,
+        site,
+        pid,
+        meta = pid,
+        .keep = "none"
+      ),
+    raw =
+      df_chk_raw |>
+      mutate(raw = pid) |>
+      select(
+        site,
+        pid,
+        any_of("observation"),
+        raw,
+        fpa_raw,
+        fnm_write_raw = fnm,
+        type_raw = type
+      )
+  )
+  vct_ref <- names(lst_chk)
+
+  for (i in seq_along(lst_chk)) {
+
+    le_ref <- vct_ref[i]
+
+    if (le_ref %in% c("do", "img", "pal", "pass")) {
+      lst_pid[[le_ref]] <- switch(
+        le_ref,
+        "do"  = {
+          lst_chk$do |>
+            summarise(
+              do = pid[1],
+              .by = c(site, pid, observation)
+            )
+        },
+        "img" = {}, # TODO
+        "pal" = {
+          lst_chk$pal |>
+            mutate(pal = pid) |>
+            select(
+              any_of("site"),
+              pid,
+              any_of("observation"),
+              pal,
+              fpa_epoch,
+              fpa_event
+            )
+        },
+        "pass" = {} # TODO
+      )
+    } else {
+      # TODO: Flush out more if people want to add own reference processing
+      # functions
+      # lst_chk[[le_ref]] <- lst_ref[[le_ref]]$process_meta_function(
+      #   lst_param <- lst_ref[[le_ref]][
+      #     !names(lst_ref[[le_ref]]) %in% c("process_meta_function",
+      #                                      "process_file_function")
+      #   ]
+      # )
+    }
+  }
+
+  # lst_pid
+  df_pid <-
+    Reduce(
+      \(x, y) full_join(x, y) |> suppressMessages(),
+      # \(x, y) full_join(x, y, by = c("site", "pid")),
+      lst_pid
+    ) |>
+    arrange(pid) |>
+    select(
+      site, pid,
+      site_deid, pid_deid,
+      any_of("observation"),
+      meta, raw, all_of(vct_ref),
+      type_raw, fnm_write_raw, fpa_raw,
+      starts_with("fpa")
+    )
+
+  if (trial_run) {
+    # Only look at raw accelerometer file going through trial run.
+    df_pid <-
+      df_pid |>
+      dplyr::filter(!is.na(raw))
+  }
+
+  df_na <-
+    df_pid |>
+    mutate(across(
+      .cols = c(meta, raw, all_of(vct_ref)),
+      .fn = is.na
+    ))
+
+  # There should be metadata for every participant that has either raw and reference data.
+  chk_meta <- any(df_na$meta)
+
+  # There should be accelerometer data for every participant that has either raw and reference data.
+  chk_raw <- any(df_na$raw)
+
+  # For each participant, check there is data from at least one reference.
+  vct_has_ref <-
+    df_na |>
+    select(all_of(vct_ref)) |>
+    mutate(across(
+      .cols = everything(),
+      .fns = \(x) !x
+    )) |>
+    Reduce(x = _,
+           f = `|`)
+  chk_ref <- !all(vct_has_ref)
+
+  if (chk_meta | chk_raw | chk_ref) {
+    vct_filter <-
+      df_na$meta | df_na$raw | !vct_has_ref
+    df_pid <-
+      df_pid |>
+      dplyr::filter(!vct_filter)
+    df_warn <-
+      df_na |>
+      dplyr::filter(vct_filter) |>
+      select(
+        site, pid, any_of("observation"),
+        meta, raw, all_of(vct_ref)
+      ) |>
+      mutate(across(
+        .cols = meta:last_col(),
+        .fns = ~ifelse(
+          .x,
+          yes = cli::symbol$cross,
+          no  = cli::symbol$tick
+        )
+      ))
+    vct_ref_pretty <-
+      recode_values(
+        vct_ref,
+        "do"   ~ "Direct Observation",
+        "img"  ~ "still-image",
+        "pal"  ~ "activPAL",
+        "pass" ~ "ActiPass"
+      )
+    vct_ref_message <-
+      paste0(vct_ref, " = ", vct_ref_pretty) |>
+      indent_cli_message()
+    rlang::warn(
+      message = c(
+        "Input data was not found for certain participants.",
+        "i" = paste0("The below table lists the following participants with missing input data (", cli::symbol$cross, " = missing data):"),
+        df_warn |>
+          kable() |>
+          capture.output() |>
+          vctrs::vec_slice(-1) |>
+          indent_cli_message(),
+        " " = "",
+        " " = "where:",
+        " " = "meta = metadata",
+        " " = "raw  = wrist accelerometer data",
+        vct_ref_message,
+        " " = "",
+        "i" = "These entries will not be run through the pipeline."
+        # "i" = "Please ensure there is metadata, wrist accelerometer data and data from at least one reference for all participant's supplied or remove participants that:",
+        # " " = "1) Are missing all metadata.",
+        # " " = "2) Are missing a wrist accelerometer file.",
+        # " " = "3) Have no reference data of any type."
+      ),
+      call = rlang::caller_env(),
+      use_cli_format = FALSE
+    )
+  }
+
+  df_pid
+
 }

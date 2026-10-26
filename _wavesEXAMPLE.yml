@@ -1,8 +1,12 @@
 study_timezone: "America/Los_Angeles"
 sampling_frequency: 80
-vct_raw_directories:
+metadata_filepath: "C:/Users/jmart250/OneDrive - Cal Poly/Keadle Research Lab - Documents/WAVES/Site Data/ACT_metadata_all.csv"
+deidentify: TRUE
+site_deid: "CP"
+wrist_accelerometer:
+  directories:
   - ~
-vct_raw_filepaths:
+  filepaths:
   - !expr list.files(
       path = file.path(
         getwd() |>
@@ -16,41 +20,30 @@ vct_raw_filepaths:
       full.names = TRUE,
       recursive  = FALSE
     )
-  - !expr list.files(
-      path = file.path(
-        getwd() |>
-          dirname() |>
-          dirname(),
-        'PALS',
-        'GENEActiv_raw_files'
-      ),
-      pattern    = '\\.bin$',
-      full.names = TRUE,
-     recursive  = FALSE
-    )
+  site_pid_observation_pattern:
+  - "(?<site>ACT24)_(?<pid>000)"
 reference:
   direct_observation:
-    directories:
+    filepath:
+    - "data/act24_do.csv"
+  still_image:
+    filepath:
     - ~
-    id_pattern:
-    - ~
-    mapping_filepath: ~
   activPAL:
     1secEpochs_directories:
-    - "/vf/users/UKBB_Matthews/CalpolyData/activPAL_Data/1_sec_epochs"
-    - "/vf/users/UKBB_Matthews/PALS/activpal/1sec_epochs"
+    - "C:/Users/jmart250/OneDrive - Cal Poly/Keadle Research Lab - Documents/WAVES/ACT24/ap_sec_header"
     1secEpochs_filepaths:
     - ~
     events_directories:
-    - "/vf/users/UKBB_Matthews/CalpolyData/activPAL_Data/events/all_events"
-    - "/vf/users/UKBB_Matthews/PALS/activpal/extended_all"
+    - "C:/Users/jmart250/OneDrive - Cal Poly/Keadle Research Lab - Documents/WAVES/ACT24/ap_events_header"
     events_filepaths:
     - ~
-    id_pattern:
-    - "ACT24_000"
-    - "PALS00000"
+    site_pid_observation_pattern:
+    - "(?<site>ACT24)_(?<pid>000)"
   actiPASS:
     directories:
     - ~
-    id_pattern:
+    filepaths:
+    - ~
+    site_pid_observation_pattern:
     - ~

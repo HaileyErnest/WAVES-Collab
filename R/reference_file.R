@@ -18,8 +18,8 @@ process_ref_file <- function(lst_chk,
         "pal" = {
           lst_out <- purrr::pmap(
             lst_chk$pal,
-            \(spo, fpa_epoch, fpa_event, ...) {rlang::try_fetch(
-              process_activpal_file(spo,
+            \(fnm, fpa_epoch, fpa_event, ...) {rlang::try_fetch(
+              process_activpal_file(fnm,
                                     fpa_epoch,
                                     fpa_event,
                                     dir_out.ref),
@@ -95,7 +95,7 @@ process_ref_file <- function(lst_chk,
   return(lst_out.ref)
 
 }
-process_activpal_file <- function(le_id,
+process_activpal_file <- function(fnm,
                                   fpa_epoch,
                                   fpa_event,
                                   dir_out.ref) {
@@ -122,7 +122,7 @@ process_activpal_file <- function(le_id,
         as.numeric() |>
         round(digits = 0) |>
         as.POSIXct(tz = "UTC"),
-      time_palp = `Time(approx)`,
+      dttm_palp = `Time(approx)`,
       mets_palp  = `Activity Score (MET.s)`,
       intensity4_palp = cut(
         mets_palp,
@@ -162,8 +162,8 @@ process_activpal_file <- function(le_id,
         "`process_activpal` function:",
         "x" = "Epoch file has a data error. Double-check events file to see what corresponding {.var class_palv} is.",
         "i" = "Can be fixed, please reach out to WAVES team.",
-        "i" = glue::glue("ID: {le_id}"),
-        "i" = glue::glue("File: {basename(vct_event[le_id])}")
+        "i" = glue::glue("ID: {fnm}"),
+        "i" = glue::glue("File: {basename(vct_event[fnm])}")
       ),
       class = "waves_process_pal_epoch",
       call   = rlang::caller_env()
@@ -193,7 +193,7 @@ process_activpal_file <- function(le_id,
         as.numeric() |>
         as.POSIXct(tz = "UTC") |>
         floor_date(unit = "seconds"),
-      time_palv = `Time(approx)`,
+      dttm_palv = `Time(approx)`,
       class_palv = factor(
         x = `Event Type`,
         levels = c(0, 1, 2, 2.1, 3, 3.1, 3.2, 4, 5),
@@ -251,8 +251,8 @@ process_activpal_file <- function(le_id,
         "`process_activpal` function:",
         "x" = "Events file has NA in events type column after renaming.",
         "i" = "Can be fixed, please reach out to WAVES team.",
-        "i" = "ID: {le_id}",
-        "i" = "File: {basename(vct_event[le_id])}"
+        "i" = "ID: {fnm}",
+        "i" = "File: {basename(vct_event[fnm])}"
       ),
       class = "waves_process_pal_event",
       call   = rlang::caller_env()
@@ -294,7 +294,7 @@ process_activpal_file <- function(le_id,
   # WRITE --------------------------------------------------------------------
   fpa_out.ref <- file.path(
     dir_out.ref,
-    paste0(le_id, "_", "pal.parquet")
+    paste0(fnm, "_", "pal.parquet")
   )
   write_parquet(
     df_pal,

@@ -1,16 +1,15 @@
-prepare_ox_input <- function(vct_raw,
-                             vct_raw_type,
+prepare_ox_input <- function(df_pid_raw,
                              vct_basic) {
 
   vct_ox_input <- vector(
     mode = "character",
-    length = length(vct_raw)
+    length = nrow(df_pid_raw)
   )
 
-  for (i in seq_along(vct_raw)) {
+  for (i in seq_len(nrow(df_pid_raw))) {
 
-    fpa_raw <- vct_raw[i]
-    le_type <- vct_raw_type[i]
+    fpa_raw <- df_pid_raw$fpa_raw[i]
+    le_type <- df_pid_raw$type_raw[i]
     chk_gen <- le_type %in% c(
       "GENEACTIV - CSV w/ HEADER",
       "ADHOC",
@@ -215,7 +214,7 @@ apply_ox_walmsley <- function(ox_input,
     cli::cli_abort(c(
       paste0(fnm_write, " did not produce output."),
       "i" = paste0(
-        "Please check ", file.path(fdr_log, paste0(log_prefix, "stepcount_", fnm_write, "_err.txt")),
+        "Please check ", file.path(fdr_log, paste0(log_prefix, "walmsley_", fnm_write, "_err.txt")),
         " and report to WAVES team."
       )
     ))
@@ -293,7 +292,7 @@ apply_ox_actinet <- function(ox_input,
     cli::cli_abort(c(
       paste0(fnm_write, " did not produce output."),
       "i" = paste0(
-        "Please check ", file.path(fdr_log, paste0(log_prefix, "stepcount_", fnm_write, "_err.txt")),
+        "Please check ", file.path(fdr_log, paste0(log_prefix, "actinet_", fnm_write, "_err.txt")),
         " and report to WAVES team."
       )
     ))
@@ -304,13 +303,12 @@ merge_ox <- function(vct_ox_step,
                      vct_ox_wlms,
                      vct_ox_acti,
                      dir_write,
-                     vct_raw_type,
+                     df_pid_raw,
                      df_start_tz) {
 
-  # Only merge files that have gone through all three algorithms.
-  vct_fnm <-
-    sapply(
-      c(vct_ox_step, vct_ox_wlms, vct_ox_acti),
+  vct_fnm_raw <-
+    lapply(
+      list(vct_ox_step, vct_ox_wlms, vct_ox_acti),
       \(.x) {
         basename(.x) |>
           sub(x = _,
@@ -318,17 +316,24 @@ merge_ox <- function(vct_ox_step,
               replacement = "")
       }
     ) |>
-    unique()
-  vct_fpa_write <- file.path(
-    dir_write, paste0(vct_fnm, ".parquet")
-  )
-  vct_complete <- vector("logical", length = length(vct_fnm))
+    Reduce(intersect, x = _)
+  vct_fpa_write <-
+    df_pid_raw |>
+    mutate(fnm_raw = basename(fpa_raw) |> file_path_sans_ext()) |>
+    dplyr::filter(fnm_raw %in% vct_fnm_raw) |>
+    pull(fnm_write_raw) |>
+    paste0(... = _, ".parquet") |>
+    file.path(dir_write, ... = _)
+  vct_complete <- vector("logical", length = length(vct_fnm_raw))
 
-  for (i in seq_along(vct_fnm)) {
+  for (i in seq_along(vct_fnm_raw)) {
 
-    le_fnm    <- vct_fnm[i]
-    fpa_write <- vct_fpa_write[i]
-    le_type   <- vct_raw_type[le_fnm]
+    fpa_write  <- vct_fpa_write[i]
+    le_fnm_raw <- vct_fnm_raw[i]
+    le_type    <- df_pid_raw$type_raw[le_fnm_raw]
+    le_fnm <-
+      basename(fpa_write) |>
+      file_path_sans_ext()
 
     if (file.exists(fpa_write)) {
       vct_complete[i] <- TRUE
@@ -339,7 +344,7 @@ merge_ox <- function(vct_ox_step,
     df_wlms <-
       fread(
         grep(x = vct_ox_wlms,
-             pattern = stringr::str_escape(le_fnm),
+             pattern = stringr::str_escape(le_fnm_raw),
              value = TRUE),
         sep = ","
       ) |>
@@ -386,7 +391,7 @@ merge_ox <- function(vct_ox_step,
     df_acti <-
       fread(
         grep(x = vct_ox_acti,
-             pattern = stringr::str_escape(le_fnm),
+             pattern = stringr::str_escape(le_fnm_raw),
              value = TRUE),
         sep = ","
       ) |>
@@ -419,7 +424,7 @@ merge_ox <- function(vct_ox_step,
     df_step <-
       fread(
         grep(x = vct_ox_step,
-             pattern = stringr::str_escape(le_fnm),
+             pattern = stringr::str_escape(le_fnm_raw),
              value = TRUE),
         sep = ","
       ) |>

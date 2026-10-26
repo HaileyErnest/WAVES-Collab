@@ -10,12 +10,11 @@
 #' @export
 #'
 #' @examples
-wrapper_GGIR <- function(vct_raw,
-                         vct_raw_type) {
+wrapper_GGIR <- function(df_pid_raw) {
 
-  if (length(vct_raw) == 0) return(NULL)
+  if (nrow(df_pid_raw) == 0) return(NULL)
 
-  chk_csv_type <- any(vct_raw_type %in% c(
+  chk_csv_type <- any(df_pid_raw$type_raw %in% c(
     "GENEACTIV - CSV w/ HEADER",
     "ADHOC",
     "UNKNOWN"
@@ -31,7 +30,7 @@ wrapper_GGIR <- function(vct_raw,
 
   # Make regex that collates vct_raw and escapes regex characters.
   le_regex <-
-    vct_raw |>
+    df_pid_raw$fpa_raw |>
     basename() |>
     stringr::str_escape() |>
     paste0(collapse = "|")
@@ -39,23 +38,22 @@ wrapper_GGIR <- function(vct_raw,
   # Check if files were already created from a previous run of the pipeline.
   vct_basic <- list.files(
     file.path("data", "GGIR", "output_WAVES", "meta", "basic"),
-    pattern = le_regex,
+    pattern = paste0(df_pid_raw$fnm_write_raw, collapse = "|"),
     full.names = TRUE
   )
-  vct_incomplete <- vct_raw[
-    !basename(vct_raw) %in%
-      (vct_basic |>
-         basename() |>
-         gsub(x = _,
-              pattern = "meta_|\\.RData",
-              replacement = ""))
-  ]
+  vct_chk_incomplete <- !df_pid_raw$fnm_write_raw %in%
+    (vct_basic |>
+       basename() |>
+       gsub(x = _,
+            pattern = "\\.RData",
+            replacement = ""))
+  vct_fpa_incomplete <- df_pid_raw$fpa_raw[vct_chk_incomplete]
 
-  if (length(vct_incomplete) == 0) return(vct_basic)
+  if (length(vct_fpa_incomplete) == 0) return(vct_basic)
 
   GGIR::GGIR(
     mode       = c(1),
-    datadir    = vct_incomplete,
+    datadir    = vct_fpa_incomplete,
     outputdir  = "data/GGIR",
     studyname  = "WAVES",
     # fo         = 1,
@@ -64,10 +62,21 @@ wrapper_GGIR <- function(vct_raw,
     configfile = "data/GGIR/config_WAVES.csv"
   )
 
-  # Make regex that collates vct_raw and escapes regex characters.
+  # List basic files and rename into consistent site_pid_observation filename.
+  file.rename(
+    from = list.files(
+      file.path("data", "GGIR", "output_WAVES", "meta", "basic"),
+      pattern    = le_regex,
+      full.names = TRUE
+    ),
+    to   = file.path(
+      "data", "GGIR", "output_WAVES", "meta", "basic",
+      paste0(df_pid_raw$fnm_write_raw[vct_chk_incomplete], ".RData")
+    )
+  )
   list.files(
     file.path("data", "GGIR", "output_WAVES", "meta", "basic"),
-    pattern = le_regex,
+    pattern    = paste0(df_pid_raw$fnm_write_raw, collapse = "|"),
     full.names = TRUE
   )
 
@@ -186,18 +195,13 @@ find_offset <- function(tz) {
     100
 
 }
-get_start_tz_df <- function(vct_fpa_basic,
+get_start_tz_df <- function(vct_basic,
                             my_tz) {
 
   vct_fnm <-
-    vct_fpa_basic |>
+    vct_basic |>
     basename() |>
-    strip_all_ext() |>
-    gsub(
-      x = _,
-      pattern = "meta_",
-      replacement = ""
-    )
+    file_path_sans_ext()
 
   lst_start_tz <- vector(mode = "list", length = length(vct_fnm))
 
@@ -205,7 +209,7 @@ get_start_tz_df <- function(vct_fpa_basic,
 
     fnm <-
       vct_fnm[i]
-    load(vct_fpa_basic[i])
+    load(vct_basic[i])
     I$header
 
     if (I$dformn == "gt3x") {
@@ -287,12 +291,7 @@ get_nonwear_sleep <- function(fpa_basic,
   le_fnm <-
     fpa_basic |>
     basename() |>
-    strip_all_ext() |>
-    gsub(
-      x = _,
-      pattern = "meta_",
-      replacement = ""
-    )
+    file_path_sans_ext()
   lst_start_tz <-
     df_start_tz |>
     dplyr::filter(fnm == le_fnm) |>

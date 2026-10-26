@@ -2,11 +2,13 @@ study_timezone: ~
 sampling_frequency: ~
 metadata_filepath: ~
 deidentify: TRUE
-site: ~
+site_deid: ~
 wrist_accelerometer:
   directories:
   - ~
   filepaths:
+  - ~
+  site_pid_observation_pattern:
   - ~
 reference:
   direct_observation:

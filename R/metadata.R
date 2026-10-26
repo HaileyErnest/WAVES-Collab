@@ -1,6 +1,6 @@
 process_meta_sup <- function(meta_fpa,
                              de_id,
-                             site) {
+                             site_deid) {
 
   df <- fread(meta_fpa)
 
@@ -22,10 +22,8 @@ process_meta_sup <- function(meta_fpa,
 
   if (de_id) {
 
-    df$site_og <- df$site
-    df$site    <- site
-    df$pid_og  <- df$pid
-    df$pid <-
+    df$site_deid <- site_deid
+    df$pid_deid <-
       sample(
         seq_along(df$pid),
         size    = nrow(df),
@@ -37,18 +35,18 @@ process_meta_sup <- function(meta_fpa,
         flag = "0"
       )
 
+  } else {
+    df$site_deid <- df$site
+    df$pid_deid  <- df$pid
   }
 
   return(df)
 
 }
 process_de_id <- function(df_meta) {
-
-  vct_id <- paste0(df_meta$site_og, "_", df_meta$pid_og)
+  vct_id <- paste0(df_meta$site_deid, "_", df_meta$pid_deid)
   names(vct_id) <- paste0(df_meta$site, "_", df_meta$pid)
-
-  return(vct_id)
-
+  sort(vct_id)
 }
 process_meta_ref <- function(lst_chk) {
 
@@ -300,7 +298,7 @@ extract_pal_header <- function(fpa) {
   lst_header$serial <- stri_extract(basename(fpa), regex = "AP\\d{6}")
   return(lst_header)
 }
-process_meta_ap <- function(le_id,
+process_meta_ap <- function(spo,
                             fpa_epoch,
                             fpa_event) {
 
@@ -375,7 +373,7 @@ process_meta_ap <- function(le_id,
 
     cli::cli_abort(
       message = c(
-        "ID `{le_id}`:",
+        "ID `{spo}`:",
         msg_epoch,
         msg_event
       ),
@@ -406,7 +404,7 @@ process_meta_ap <- function(le_id,
       pull(msg)
     cli::cli_abort(
       message = c(
-        "{le_id} epoch and event files not processed with same software version or options.",
+        "{spo} epoch and event files not processed with same software version or options.",
         "i" = "Recommend processing both files with exact same software version and options.",
         "i" = "The following options differ:",
         vct_different
@@ -417,7 +415,7 @@ process_meta_ap <- function(le_id,
 
   lst_header_epoch |>
     as_tibble() |>
-    mutate(id = le_id,
+    mutate(id = spo,
            .before = 1)
 
 }

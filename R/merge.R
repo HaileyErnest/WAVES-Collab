@@ -56,11 +56,19 @@ merge_wrangler <- function(df) {
         replacement = "intensity3_"
       )
     ) |>
-    select(id, datetime, starts_with("time"), invalid, sleep,
-           starts_with("mets"),
-           starts_with("intensity"),
-           starts_with("steps"),
-           starts_with("class")) |>
+    select(
+      site, pid, any_of("observation"),
+      datetime, starts_with("dttm"),
+      date, time,
+      invalid, sleep,
+      starts_with("domain"),
+      starts_with("posture"),
+      starts_with("sedtype"),
+      starts_with("mets"),
+      starts_with("intensity"),
+      starts_with("steps"),
+      starts_with("class")
+    ) |>
     # Make all intensity variables have the same levels
     mutate(across(
       .cols = starts_with("intensity3"),
@@ -71,12 +79,16 @@ merge_wrangler <- function(df) {
       .fns = ~factor(.x, levels = c("sedentary", "light", "moderate", "vigorous", "sleep", "nonwear"))
     ))
 }
-merge_output <- function(vct_nw.sleep,
+merge_output <- function(de_id,
+                         df_pid,
+                         spo_pat_raw,
+                         spo_pat_ref,
+                         lst_out.ref,
+                         vct_nw.sleep,
                          vct_out.raw,
                          vct_out.oak.pre,
                          vct_out.cut,
                          vct_ox,
-                         vct_out.ref,
                          dir_merged,
                          df_start_tz) {
 
@@ -88,140 +100,411 @@ merge_output <- function(vct_nw.sleep,
       FUN = \(x) setNames(x, basename(x) |> file_path_sans_ext())
     ) |>
     setNames(c("nw.sleep", "raw", "oak.pre", "cut", "ox"))
+  vct_ref_secondary <- c("pal", "pass")[c("pal", "pass") %in% names(df_pid)]
 
-  # Only merge files that have gone through all steps and have a reference file.
-  vct_fnm <- Reduce(
-    intersect,
-    x = lapply(
-      lst_out[c("nw.sleep", "raw", "oak.pre", "cut", "ox")],
-      FUN = names
-    )
-  )
-
-  # TODO: Work on a method that isn't dependent on id_pt being the same between
-  # raw and reference data. Do so where the actual numeric participant ID location
-  # for each id_pt string, then search for the numeric ID across sources.
-  # Right now, assumes id_pt is exactly the same from all sources of data.
-  # mtx_id_location <- matrix(
-  #   c(
-  #     stri_locate_first(
-  #       lst_yaml$ref$pal$id_pt,
-  #       regex = "\\\\d"
-  #     )[, "start"],
-  #     end = stri_locate_last(
-  #       lst_yaml$ref$pal$id_pt,
-  #       regex = "\\\\d"
-  #     )[, "end"]
-  #   ),
-  #   nrow = 2,
-  #   ncol = 2,
-  #   byrow = TRUE,
-  #   dimnames = list(c("start", "end"),
-  #                   NULL)
+  # # Figure out if (?<obs> ) was included within raw or secondary references
+  # # by checking the filenames.
+  # # If it was included within raw spo_pat, then there will be 2 underscore separators.
+  # # If it was included within secondary ref spo_pat, then there will be 3 underscore
+  # # separators.
+  # vct_fnm <- Reduce(
+  #   intersect,
+  #   x = lapply(
+  #     lst_out[c("nw.sleep", "raw", "oak.pre", "cut", "ox")],
+  #     FUN = names
+  #   )
   # )
-  vct_id_ref <- stri_replace(
-    basename(vct_out.ref),
-    regex       = "(_[^_]*)$",
-    replacement = ""
-  )
-  lst_out$ref <- setNames(
-    vct_out.ref,
-    vct_id_ref
-  )
+  # chk_obs_raw <- stri_count(vct_fnm, regex = "_")
+  # if (length(vct_ref_secondary) != 0) {
+  #   chk_obs_ref <- sapply(
+  #     lst_out.ref[vct_ref_secondary],
+  #     \(x) all(basename(x) |> stri_count(regex = "_") == 3)
+  #   )
+  # } else {chk_obs_ref <- FALSE}
 
-  # Files that don't have a corresponding reference file.
-  # vct_fnm[grep(
-  #   x = vct_fnm,
-  #   pattern = paste0(vct_id_ref, collapse = "|"),
-  #   invert = TRUE
-  # )]
-  vct_fnm <- vct_fnm[grep(
-    x = vct_fnm,
-    pattern = paste0(vct_id_ref, collapse = "|")
-  )]
+  # Figure out if (?<obs> ) was included within the raw or secondary references
+  # spo_pat by directly checking spo_pat from lst_yaml. Through this method, it
+  # is less likely for unknown errors to pop up if I decide to change how
+  # processed ref files are named in the future, or if an underscore is ever
+  # included within `site`.
+  chk_obs_raw <- stri_detect(spo_pat_raw,
+                             regex = "\\(\\?\\<obs\\>")
+  if (length(vct_ref_secondary) != 0) {
+    vct_chk_obs_ref <-
+      stri_detect(spo_pat_ref, regex = "\\(\\?\\<obs\\>") |>
+      setNames(vct_ref_secondary)
+  } else {
+    vct_chk_obs_ref <- FALSE
+  }
 
-  vct_fpa_write <-
-    file.path(
-      dir_merged,
-      paste0(
-        # TODO: See above. Uses id_pt from reference.
-        stri_extract(vct_fnm,
-                     regex = paste0(vct_id_ref, collapse = "|")),
-        ".parquet"
+  if (de_id) {
+    vct_cols_fnm_write <- c("site_deid", "pid_deid")
+  } else {
+    vct_cols_fnm_write <- c("site", "pid")
+  }
+
+  if (chk_obs_raw) vct_cols_fnm_write <- c(vct_cols_fnm_write, "observation")
+
+  lst_fpa_write <-
+    vector(mode = "list", length = 2) |>
+    setNames(c("do", "raw"))
+
+  if ("do" %in% names(lst_out.ref)) {
+
+    # Use direct observations data as "anchor", where all other data, including other
+    # reference data, are left_joined to direct observation data. Then merge with
+    # algorithm output.
+    fs::dir_create(file.path(dir_merged, "ANCHOR_DO"))
+    vct_fpa_write <- file.path(
+        dir_merged,
+        "ANCHOR_DO",
+        paste0(
+          df_pid[[vct_cols_fnm_write[1]]], "_",
+          df_pid[[vct_cols_fnm_write[2]]], "_",
+          df_pid$observation,
+          ".parquet"
+        )
       )
-    ) |>
-    setNames(vct_fnm)
-  vct_complete <- vector("logical", length = length(vct_fnm))
+    if (chk_obs_raw) {
+      vct_fnm_raw <- paste(
+        df_pid$site,
+        df_pid$pid,
+        df_pid$observation,
+        sep = "_"
+      )
+    } else{
+      vct_fnm_raw <- paste(
+        df_pid$site,
+        df_pid$pid,
+        sep = "_"
+      )
+    }
+    vct_complete <- vector("logical", length = length(vct_fpa_write))
+    lst_df_ref <-
+      vector(mode = "list",
+             length = length(vct_ref_secondary)) |>
+      setNames(vct_ref_secondary)
+    vct_prev_regex <-
+      character(length = length(vct_ref_secondary)) |>
+      setNames(vct_ref_secondary)
 
-  # Merge ----
-  for (i in seq_along(vct_fnm)) {
+    for (i in seq_along(vct_fpa_write)) {
 
-    le_fnm <- vct_fnm[i]
-    fpa_write <- vct_fpa_write[i]
-    le_id <-
-      fpa_write |>
-      basename() |>
-      file_path_sans_ext()
-    lst_start_tz <-
-      df_start_tz |>
-      dplyr::filter(fnm == le_fnm) |>
-      as.list()
+      le_site <- df_pid$site[i]
+      le_pid  <- df_pid$pid[i]
+      le_obs  <- df_pid$observation[i]
+      le_fnm_raw <- vct_fnm_raw[i]
+      fpa_write <- vct_fpa_write[i]
 
-    # Check if file was already created from a previous run of the pipeline.
-    if (file.exists(fpa_write)) {
+      # Commenting this out for now. Since the repository is constantly being
+      # updated, I don't want a user to accidently send over merged data that
+      # is incorrect somehow. So if there are upstream changes, always rerun
+      # this step.
+      # # Check if file was already created from a previous run of the pipeline.
+      # if (file.exists(fpa_write)) {
+      #   vct_complete[i] <- TRUE
+      #   next
+      # }
+
+      # Load non-direct observation reference data first so as to not repeatedly
+      # load the same file multiple times if (?<obs> ) was not provided (i.e.
+      # user has one multiple day file for each direct observation session).
+      for (ii in seq_along(vct_chk_obs_ref)) {
+
+        chk_obs_ref <- vct_chk_obs_ref[ii]
+        le_ref <- vct_ref_secondary[ii]
+
+        chk_ref <-
+          df_pid |>
+          dplyr::filter(
+            site        == le_site,
+            pid         == le_pid,
+            observation == le_obs
+          ) |>
+          pull(all_of(le_ref)) |>
+          is.na()
+
+        if (chk_ref) next # No other reference data for pid
+
+        if (chk_obs_ref) {
+          le_fnm_ref <- paste(
+            le_site, le_pid, le_obs,
+            sep = "_"
+          )
+          lst_df_ref[[le_ref]] <-
+            lst_out.ref[[le_ref]] |>
+            stri_subset(regex = le_fnm_ref) |>
+            read_parquet()
+        } else {
+          le_fnm_ref <- paste(
+            le_site, le_pid,
+            sep = "_"
+          )
+
+          if (i == 1) {
+            lst_df_ref[[le_ref]] <-
+              lst_out.ref[[le_ref]] |>
+              stri_subset(regex = le_fnm_ref) |>
+              read_parquet()
+            prev_fnm_ref <- le_fnm_ref
+          } else if (prev_fnm_ref != le_fnm_ref) {
+            lst_df_ref[[le_ref]] <-
+              lst_out.ref[[le_ref]] |>
+              stri_subset(regex = le_fnm_ref) |>
+              read_parquet()
+            prev_fnm_ref <- le_fnm_ref
+          }
+        }
+      }
+
+      # Now merge reference data with direct observation.
+      df_merge_ref <-
+        lst_out.ref$do |>
+        dplyr::filter(
+          site        == le_site,
+          pid         == le_pid,
+          observation == le_obs
+        )
+
+      for (ii in seq_along(lst_df_ref)) {
+        if (length(lst_df_ref[[ii]]) == 0) next
+
+        df_merge_ref <-
+          left_join(
+            df_merge_ref,
+            lst_df_ref[[ii]]
+          ) |>
+          suppressMessages()
+      }
+
+      # Now the rest of the output.
+      df_merge_ref |>
+        # Left join non-wear/sleep and cutpoint as they are both based off
+        # M$metashort and can just do a down fill for non-wear/sleep.
+        left_join(
+          read_parquet(lst_out$cut[le_fnm_raw]),
+          by = join_by(datetime)
+        ) |>
+        left_join(
+          read_parquet(lst_out$nw.sleep[le_fnm_raw]),
+          by = join_by(datetime)
+        ) |>
+        fill(sleep:invalid,
+             .direction = "down") |>
+        left_join(
+          read_parquet(lst_out$raw[le_fnm_raw]) |> mutate(datetime = as.POSIXct(datetime, tz = "UTC")),
+          by = join_by(datetime)
+        ) |>
+        left_join(
+          read_parquet(lst_out$oak.pre[le_fnm_raw]) |> mutate(datetime = as.POSIXct(datetime, tz = "UTC")),
+          by = join_by(datetime)
+        ) |>
+        left_join(
+          read_parquet(lst_out$ox[le_fnm_raw]),
+          by = join_by(datetime)
+        ) |>
+        # Update site and pid with de_identified one if necessary.
+        mutate(
+          site = df_pid[[vct_cols_fnm_write[1]]][i],
+          pid  = df_pid[[vct_cols_fnm_write[2]]][i]
+        ) |>
+        # wrangle
+        merge_wrangler() |>
+        # write
+        write_parquet(sink = fpa_write)
       vct_complete[i] <- TRUE
-      next
+
     }
 
-    # read & merge
-    # Left join first reference output then with non-wear/sleep and cutpoint as
-    # they are both based off M$metashort and can just do a down fill for non-wear/sleep.
-    left_join(
-      read_parquet(lst_out$ref[le_id]) |>
-        mutate(id2 = id,
-               id  = le_fnm,
-               .after = id),
-      read_parquet(lst_out$cut[le_fnm]),
-      by = join_by(id, datetime)
-    ) |>
-    left_join(
-      read_parquet(lst_out$nw.sleep[le_fnm]),
-      by = join_by(id, datetime)
-    ) |>
-      fill(sleep:invalid,
-           .direction = "down") |>
-      left_join(
-        read_parquet(lst_out$raw[le_fnm]) |> mutate(datetime = as.POSIXct(datetime, tz = "UTC")),
-        by = join_by(id, datetime)
-      ) |>
-      left_join(
-        read_parquet(lst_out$oak.pre[le_fnm]) |> mutate(datetime = as.POSIXct(datetime, tz = "UTC")),
-        by = join_by(id, datetime)
-      ) |>
-      left_join(
-        read_parquet(lst_out$ox[le_fnm]),
-        by = join_by(id, datetime)
-      ) |>
-      # wrangle
-      merge_wrangler() |>
-      # add date column and time column in timezone data was collected.
-      mutate(
-        date =
-          with_tz(datetime, tzone = lst_start_tz$tz) |>
-          date(),
-        time =
-          with_tz(datetime, tzone = lst_start_tz$tz) |>
-          format("%H:%M:%S%z"),
-        .after = datetime
-      ) |>
-      # write
-      write_parquet(sink = fpa_write)
-
-    vct_complete[i] <- TRUE
+    lst_fpa_write[["do"]] <- vct_fpa_write[vct_complete]
 
   }
 
-  return(vct_fpa_write[vct_complete])
+  # Only do another merge if:
+  # 1) Direct observation data was provided AND there are entries with secondary
+  #    reference data remaining after removing entries with direct observation
+  #    data. Have to do it this way as its possible an "observation" session is
+  #    actually the free-living "visit", in which case it is assumed there would
+  #    be no direct observation data.
+  # 2) The (?<obs> ) pattern was NOT included within the raw AND secondary
+  #    reference spo_pat, regardless if direct observation data was provided or
+  #    not.
+
+  if ("do" %in% names(lst_out.ref)) {
+    if (!chk_obs_raw && any(!vct_chk_obs_ref)) {
+      df_no_do <-
+        df_pid |>
+        select(-any_of(c("observation", "do"))) |>
+        distinct()
+      chk_no_do <- FALSE
+    } else {
+      df_no_do <-
+        df_pid |>
+        dplyr::filter(is.na(do))
+      chk_no_do <- nrow(df_no_do) != 0
+    }
+  } else {
+    df_no_do  <- df_pid
+    chk_no_do <- FALSE
+  }
+
+  if (chk_no_do ||
+      (!chk_obs_raw && any(!vct_chk_obs_ref))) {
+
+    # df_no_do$pass <- NA_integer_ # REMOVE AFTER TESTING
+
+    # Use wrist accelerometer data as "anchor", where all other data, including other
+    # reference data, are left_joined to wrist accelerometer data.
+
+    fs::dir_create(file.path(dir_merged, "ANCHOR_RAW"))
+    vct_fpa_write <-
+      file.path(
+        dir_merged,
+        "ANCHOR_RAW",
+        paste0(
+          df_no_do |>
+            unite(
+              col = fnm,
+              all_of(vct_cols_fnm_write),
+              sep = "_"
+            ) |>
+            pull(fnm),
+          ".parquet"
+          )
+      )
+
+    if (chk_obs_raw) {
+      vct_fnm_raw <- paste(
+        df_no_do$site,
+        df_no_do$pid,
+        df_no_do$observation,
+        sep = "_"
+      )
+    } else{
+      vct_fnm_raw <- paste(
+        df_no_do$site,
+        df_no_do$pid,
+        sep = "_"
+      )
+    }
+
+    vct_complete <- vector("logical", length = length(vct_fpa_write))
+
+    # Merge ----
+    for (i in seq_along(vct_fpa_write)) {
+
+      le_fnm_raw <- vct_fnm_raw[i]
+      fpa_write  <- vct_fpa_write[i]
+      lst_start_tz <-
+        df_start_tz |>
+        dplyr::filter(fnm == le_fnm_raw) |>
+        as.list()
+
+      # Commenting this out for now. Since the repository is constantly being
+      # updated, I don't want a user to accidently send over merged data that
+      # is incorrect somehow. So if there are upstream changes, always rerun
+      # this step.
+      # # Check if file was already created from a previous run of the pipeline.
+      # if (file.exists(fpa_write)) {
+      #   vct_complete[i] <- TRUE
+      #   next
+      # }
+
+      cnt_read <- 0
+
+      ## Merge reference data together ----
+      for (ii in seq_along(vct_ref_secondary)) {
+
+        chk_obs_ref <- vct_chk_obs_ref[ii]
+        le_ref <- vct_ref_secondary[ii]
+
+        if (chk_obs_ref) {
+          le_fnm_ref <- paste(
+            df_no_do$site[i],
+            df_no_do$pid[i],
+            df_no_do$observation[i],
+            sep = "_"
+          )
+        } else {
+          le_fnm_ref <- paste(
+            df_no_do$site[i],
+            df_no_do$pid[i],
+            sep = "_"
+          )
+        }
+
+        if (is.na(df_no_do[[le_ref]][i])) next
+
+        if (cnt_read == 0) {
+          df_ref <-
+            lst_out.ref[[le_ref]] |>
+            stri_subset(regex = le_fnm_ref) |>
+            read_parquet()
+        } else {
+          df_ref <- full_join(
+            df_ref,
+            lst_out.ref[[le_ref]] |>
+              stri_subset(regex = le_fnm_ref) |>
+              read_parquet(),
+            by = datetime
+          )
+        }
+
+        cnt_read <- cnt_read + 1
+
+      }
+
+      # read & merge
+      # Left join first reference output then with non-wear/sleep and cutpoint as
+      # they are both based off M$metashort and can just do a down fill for non-wear/sleep.
+      left_join(
+        read_parquet(lst_out$cut[le_fnm_raw]),
+        read_parquet(lst_out$nw.sleep[le_fnm_raw]),
+        by = join_by(datetime)
+      ) |>
+        fill(sleep:invalid,
+             .direction = "down") |>
+        left_join(
+          read_parquet(lst_out$raw[le_fnm_raw]) |> mutate(datetime = as.POSIXct(datetime, tz = "UTC")),
+          by = join_by(datetime)
+        ) |>
+        left_join(
+          read_parquet(lst_out$oak.pre[le_fnm_raw]) |> mutate(datetime = as.POSIXct(datetime, tz = "UTC")),
+          by = join_by(datetime)
+        ) |>
+        left_join(
+          read_parquet(lst_out$ox[le_fnm_raw]),
+          by = join_by(datetime)
+        ) |>
+        left_join(
+          df_ref,
+          by = join_by(datetime)
+        ) |>
+        # add identifying information, date column and time column in timezone data was collected.
+        mutate(
+          site = df_no_do[[vct_cols_fnm_write[1]]][i],
+          pid  = df_no_do[[vct_cols_fnm_write[2]]][i],
+          if (chk_obs_raw) {observation =  df_no_do$observation[i]},
+          date =
+            with_tz(datetime, tzone = lst_start_tz$tz) |>
+            date(),
+          time =
+            with_tz(datetime, tzone = lst_start_tz$tz) |>
+            format("%H:%M:%S%z")
+        ) |>
+        # wrangle
+        merge_wrangler() |>
+        # write
+        write_parquet(sink = fpa_write)
+      vct_complete[i] <- TRUE
+
+    }
+
+    lst_fpa_write[["raw"]] <- vct_fpa_write[vct_complete]
+
+  }
+
+  return(unlist(lst_fpa_write))
 
 }
 merge_output_config <- function(vct_nw.sleep,
@@ -235,7 +518,7 @@ merge_output_config <- function(vct_nw.sleep,
   full_join(
     lapply(vct_out.cut, read_parquet) |>  rbindlist(),
     lapply(vct_nw.sleep, read_parquet) |>  rbindlist(),
-    by = join_by(id, datetime)
+    by = join_by(datetime)
   ) |>
     fill(sleep:invalid,
          .direction = "down") |>
@@ -244,19 +527,19 @@ merge_output_config <- function(vct_nw.sleep,
       lapply(vct_out.raw, read_parquet) |>
         rbindlist() |>
         mutate(datetime = as.POSIXct(datetime, tz = "UTC")),
-      by = join_by(id, datetime)
+      by = join_by(datetime)
     ) |>
     # out.oak.pre
     left_join(
       lapply(vct_out.oak.pre, read_parquet) |>
         rbindlist() |>
         mutate(datetime = as.POSIXct(datetime, tz = "UTC")),
-      by = join_by(id, datetime)
+      by = join_by(datetime)
     ) |>
     # ox
     left_join(
       lapply(vct_ox, read_parquet) |>  rbindlist(),
-      by = join_by(id, datetime)
+      by = join_by(datetime)
     ) |>
     merge_wrangler() |>
     mutate(

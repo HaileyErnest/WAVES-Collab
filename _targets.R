@@ -249,6 +249,20 @@ tar_plan(
     format  = "qs"
   ),
   ##%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+  ##                          METADATA  - SUPPLIED                         ----
+  ##%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+  tar_file_read(
+    name    = df_meta,
+    command = lst_yaml$meta_fpa,
+    read    = process_meta_sup(
+      meta_fpa  = !!.x,
+      de_id     = de_id,
+      site_deid = lst_yaml$site_deid
+    ),
+    format  = "parquet"
+  ),
+  vct_de_id = process_de_id(df_meta),
+  ##%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   ##                                FILE PATHS                              ----
   ##%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   tar_files_input(
@@ -269,6 +283,50 @@ tar_plan(
     )
   ),
   ##%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+  ##                               CHECK INPUT                              ----
+  ##%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+  de_id       = lst_yaml$de_id,
+  spo_pat_raw = lst_yaml$raw$spo_pat,
+  tar_parquet(
+    name    = df_chk_raw,
+    command = check_input_raw(vct_raw,
+                              spo_pat = lst_yaml$raw$spo_pat)
+  ),
+  lst_chk = check_input_ref(lst_ref,
+                            my_tz = lst_yaml$my_tz),
+  spo_pat_ref = sapply(
+    lst_yaml$ref[c("pal", "pass")[c("pal", "pass") %in% names(lst_chk)]],
+    \(x) x$spo_pat
+  ),
+  tar_parquet(
+    name    = df_pid,
+    command = check_input_pid(
+      df_meta    = df_meta,
+      df_chk_raw = df_chk_raw,
+      lst_chk    = lst_chk,
+      trial_run  = trial_run
+    )
+  ),
+  # Needed for dynamic branching and when there is one raw accelerometer file for
+  # multiple direct observation sessions.
+  tar_parquet(
+    name    = df_pid_raw,
+    command =
+      df_pid |>
+      distinct(fpa_raw, .keep_all = TRUE)
+  ),
+  ##%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+  ##                           METADATA - REFERENCE                         ----
+  ##%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+  lst_meta = process_meta_ref(lst_chk),
+  ##%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+  ##                             PROCESS - REFERENCE                        ----
+  ##%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+  lst_out.ref = process_ref_file(
+    lst_chk     = lst_chk,
+    dir_out.ref = dir_out.ref
+  ),
+  ##%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   ##                             FILE DIRECTORIES                           ----
   ##%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   dir_models      = "models",
@@ -286,44 +344,11 @@ tar_plan(
   dir_actinet     = fdr_actinet,
   dir_merged      = fdr_merged,
   ##%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-  ##                               DEMOGRAPHICS                             ----
-  ##%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-  ##%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-  ##                               CHECK INPUT                              ----
-  ##%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-  lst_chk = check_input_ref(lst_ref,
-                            my_tz = lst_yaml$my_tz),
-  ##%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-  ##                          METADATA  - SUPPLIED                         ----
-  ##%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-  tar_parquet(
-    name    = df_meta,
-    command = process_meta_sup(
-      meta_fpa = lst_yaml$meta_fpa,
-      de_id    = lst_yaml$de_id,
-      site     = lst_yaml$site
-    )
-  ),
-  vct_de_id = process_de_id(df_meta),
-  ##%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-  ##                           METADATA - REFERENCE                         ----
-  ##%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-  lst_meta = process_meta_ref(lst_chk),
-  ##%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-  ##                             PROCESS - REFERENCE                        ----
-  ##%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-  lst_out.ref = process_ref_file(
-    lst_chk     = lst_chk,
-    dir_out.ref = dir_out.ref
-  ),
-  ##%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   ##                              PROCESS - GGIR                            ----
   ##%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-  vct_raw_type = config_raw_type(vct_raw),
   tar_files(
     name    = vct_basic,
-    command = wrapper_GGIR(vct_raw,
-                           vct_raw_type)
+    command = wrapper_GGIR(df_pid_raw)
   ),
   tar_parquet(
     name    = df_start_tz,
@@ -352,11 +377,8 @@ tar_plan(
   ##%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   ##                           PROCESS - OXWEARABLES                        ----
   ##%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-  vct_ox_input = prepare_ox_input(
-    vct_raw,
-    vct_raw_type,
-    vct_basic
-  ),
+  vct_ox_input = prepare_ox_input(df_pid_raw,
+                                  vct_basic),
   tar_file(
     name    = vct_ox_step,
     command = apply_ox_stepcount(
@@ -399,12 +421,12 @@ tar_plan(
   tar_file(
     name    = vct_ox,
     command = merge_ox(
-      vct_ox_step  = vct_ox_step,
-      vct_ox_wlms  = vct_ox_wlms,
-      vct_ox_acti  = vct_ox_acti,
-      dir_write    = dir_out.ox,
-      vct_raw_type = vct_raw_type,
-      df_start_tz  = df_start_tz
+      vct_ox_step = vct_ox_step,
+      vct_ox_wlms = vct_ox_wlms,
+      vct_ox_acti = vct_ox_acti,
+      dir_write   = dir_out.ox,
+      df_pid_raw  = df_pid_raw,
+      df_start_tz = df_start_tz
     )
   ),
   ##%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -413,12 +435,13 @@ tar_plan(
   tar_file(
     name      = vct_cal,
     command   = read_acc_raw(
-      fpa_read      = vct_raw,
-      le_type       = vct_raw_type,
-      vct_fpa_basic = vct_basic,
-      dir_cal       = dir_cal
+      fpa_read  = df_pid_raw$fpa_raw,
+      le_fnm    = df_pid_raw$fnm_write_raw,
+      le_type   = df_pid_raw$type_raw,
+      vct_basic = vct_basic,
+      dir_cal   = dir_cal
     ),
-    pattern   = map(vct_raw, vct_raw_type),
+    pattern   = map(df_pid_raw),
     iteration = "vector"
   ),
   tar_file(
@@ -455,12 +478,16 @@ tar_plan(
   tar_target(
     name    = vct_merge,
     command = merge_output(
+      de_id           = de_id,
+      df_pid          = df_pid,
+      spo_pat_raw     = spo_pat_raw,
+      spo_pat_ref     = spo_pat_ref,
+      lst_out.ref     = lst_out.ref,
       vct_nw.sleep    = vct_nw.sleep,
       vct_out.raw     = vct_out.raw,
       vct_out.oak.pre = vct_out.oak.pre,
       vct_out.cut     = vct_out.cut,
       vct_ox          = vct_ox,
-      vct_out.ref     = vct_out.ref,
       dir_merged      = dir_merged,
       df_start_tz     = df_start_tz
     ),
@@ -474,9 +501,13 @@ tar_plan(
     )
   } else {
     tar_quarto(
-      name = pipeline_summary,
-      path = "quarto/summary_pipeline_main.qmd",
-      output_file = file.path(getwd(), fdr_reports, "summary_pipeline_main.html")
+      name  = pipeline_summary,
+      path  = "quarto/summary_pipeline_main.qmd",
+      quiet = FALSE
     )
-  }
+  },
+  tar_file(
+    name    = pipeline_summary_file,
+    command = move_render(pipeline_summary)
+  )
 )

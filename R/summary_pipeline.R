@@ -62,30 +62,67 @@ summarize_major_steps <- function(vct_raw,
       file_noext    = NULL
     )
 }
-summarize_major_main_steps <- function(lst_yaml,
-                                       vct_out.ref,
-                                       vct_raw,
-                                       vct_basic,
-                                       vct_nw.sleep,
-                                       vct_cal,
-                                       vct_out.raw,
-                                       vct_out.oak.pre,
-                                       vct_out.cut,
-                                       vct_ox_step,
-                                       vct_ox_wlms,
-                                       vct_ox_acti) {
+summarize_reference_steps <- function(df_pid,
+                                      spo_pat_raw,
+                                      spo_pat_ref,
+                                      lst_chk,
+                                      lst_meta,
+                                      lst_out.ref,
+                                      vct_merge) {
 
-  df <- tibble(
-    id         = stri_extract(
-      basename(vct_raw),
-      # TODO: When working with UWM data, have a id_pt
-      # for raw data. What to do if lst_yaml$raw$id_pt
-      # is not the same as lst_yaml$ref$pal$id_pt?
-      regex = paste0(lst_yaml$ref$pal$id_pt, collapse = "|")
-    ),
-    file       = basename(vct_raw),
-    file_noext = strip_all_ext(file)
-  )
+  # LEFT OFF HERE
+  # Show a table that has the DO merged files and the free-living merged files?
+  # Since we have a lot of checks for the reference data that is specified through
+  # the YAML file, don't have to show if they were successfully processed (i.e.
+  # they should all ALWAYS be successfully processed). So right now, not using
+  # this function for anything.
+  # df_do <-
+    stri_subset(vct_merge,
+                regex = "ANCHOR_DO") |>
+    basename() |>
+    file_path_sans_ext() |>
+    stri_split(regex = "_") |>
+    as.data.frame() |>
+    transpose()
+
+  #
+
+  # Sedentary minutes
+  vct_merge[1] |>
+    read_parquet() |>
+    summarise(across(
+      .cols = starts_with("intensity3"),
+      .fns = ~sum(.x == "sedentary", na.rm = TRUE) / 60
+    ))
+
+
+  # chk_obs_raw <- stri_detect(spo_pat_raw,
+  #                            regex = "\\(\\?\\<obs\\>")
+  # if (length(vct_ref_secondary) != 0) {
+  #   vct_chk_obs_ref <- stri_detect(spo_pat_ref, regex = "\\(\\?\\<obs\\>")
+  # } else {
+  #   vct_chk_obs_ref <- FALSE
+  # }
+  #
+  # if ("do" %in% names(lst_out.ref)) {
+  #   if (!chk_obs_raw && any(!vct_chk_obs_ref)) {
+  #     df_no_do <-
+  #       df_pid |>
+  #       select(-any_of(c("observation", "do"))) |>
+  #       distinct()
+  #     chk_no_do <- FALSE
+  #   } else {
+  #     df_no_do <-
+  #       df_pid |>
+  #       dplyr::filter(is.na(do))
+  #     chk_no_do <- nrow(df_no_do) != 0
+  #   }
+  # } else {
+  #   df_no_do  <- df_pid
+  #   chk_no_do <- FALSE
+  # }
+  #
+  # chk_no_do || (!chk_obs_raw && any(!vct_chk_obs_ref))
 
   if (!all(simplify_is_null(lst_yaml$ref$do))) {
     vct_nm_pal <-
@@ -117,11 +154,64 @@ summarize_major_main_steps <- function(lst_yaml,
       stri_replace(regex = "_pal",
                    replacement = "")
   }
+
+  df |>
+    mutate(
+      DO            = if (exists("vct_nm_do")) {fnm %in% vct_nm_do} else NULL,
+      activPAL      = if (exists("vct_nm_pal")) {fnm %in% vct_nm_pal} else NULL,
+      ActiPass      = if (exists("vct_nm_pass")) {fnm %in% vct_nm_pass} else NULL
+    )
+
+}
+summarize_accelerometer_steps <- function(de_id,
+                                          df_pid,
+                                          spo_pat_raw,
+                                          vct_raw,
+                                          vct_basic,
+                                          vct_nw.sleep,
+                                          vct_cal,
+                                          vct_out.raw,
+                                          vct_out.oak.pre,
+                                          vct_out.cut,
+                                          # vct_ox_step,
+                                          # vct_ox_wlms,
+                                          # vct_ox_acti,
+                                          vct_ox) {
+
+  chk_obs_raw <- stri_detect(spo_pat_raw,
+                             regex = "\\(\\?\\<obs\\>")
+
+  if (de_id) {
+    vct_cols_fnm_merged <- c("site_deid", "pid_deid")
+  } else {
+    vct_cols_fnm_merged <- c("site", "pid")
+  }
+
+  if (chk_obs_raw) {
+    vct_cols_fnm_merged <- c(vct_cols_fnm_merged, "observation")
+    vct_cols_fnm_raw    <- c("site", "pid", "observation")
+  } else {
+    vct_cols_fnm_raw    <- c("site", "pid")
+  }
+
+  df <-
+    df_pid |>
+    select(all_of(c(vct_cols_fnm_merged,vct_cols_fnm_raw))) |>
+    distinct() |>
+    unite(
+      col = id,
+      all_of(vct_cols_fnm_merged),
+      sep = "_",
+      remove =  if (all(vct_cols_fnm_merged == vct_cols_fnm_raw)) FALSE else TRUE
+    ) |>
+    unite(
+      col = fnm_raw,
+      all_of(vct_cols_fnm_raw),
+      sep = "_"
+    )
   vct_nm_ggir <-
     basename(vct_basic) |>
-    gsub(x = _,
-         pattern = "meta_|\\.RData",
-         replacement = "")
+    file_path_sans_ext()
   vct_nm_nw.sleep <-
     basename(vct_nw.sleep) |>
     file_path_sans_ext()
@@ -137,37 +227,44 @@ summarize_major_main_steps <- function(lst_yaml,
   vct_nm_cut <-
     basename(vct_out.cut) |>
     file_path_sans_ext()
-  vct_nm_stp <-
-    basename(vct_ox_step) |>
-    gsub(x = _,
-         pattern = "-StepTimes\\.csv\\.gz",
-         replacement = "")
-  vct_nm_wlm <-
-    basename(vct_ox_wlms) |>
-    gsub(x = _,
-         pattern = "-timeSeries\\.csv\\.gz",
-         replacement = "")
-  vct_nm_act <-
-    basename(vct_ox_acti) |>
-    gsub(x = _,
-         pattern = "-timeSeries\\.csv\\.gz",
-         replacement = "")
+  # TODO: Eventually will have to remove the merge_ox (target vct_ox) function.
+  # As of now, if one oxwearable method fails on a file, then that file won't have
+  # an entry in vct_ox (i.e. all oxwearable methods have to work on a file in order
+  # for it to be included in the final merged output). Additionally, the oxwearable
+  # output includes the original filename of the accelerometer file, so it won't
+  # be named in the consistent format of the other accelerometer steps.
+  # So for now, just have an Oxwearables column.
+  vct_nm_ox <-
+    basename(vct_ox) |>
+    file_path_sans_ext()
+  # vct_nm_stp <-
+  #   basename(vct_ox_step) |>
+  #   gsub(x = _,
+  #        pattern = "-StepTimes\\.csv\\.gz",
+  #        replacement = "")
+  # vct_nm_wlm <-
+  #   basename(vct_ox_wlms) |>
+  #   gsub(x = _,
+  #        pattern = "-timeSeries\\.csv\\.gz",
+  #        replacement = "")
+  # vct_nm_act <-
+  #   basename(vct_ox_acti) |>
+  #   gsub(x = _,
+  #        pattern = "-timeSeries\\.csv\\.gz",
+  #        replacement = "")
   df |>
     mutate(
-      DO            = if (exists("vct_nm_do")) {id %in% vct_nm_do} else NULL,
-      activPAL      = if (exists("vct_nm_pal")) {id %in% vct_nm_pal} else NULL,
-      ActiPass      = if (exists("vct_nm_pass")) {id %in% vct_nm_pass} else NULL,
-      GGIR          = file %in% vct_nm_ggir,
-      nw.sleep      = file_noext %in% vct_nm_nw.sleep,
-      calibration   = file_noext %in% vct_nm_cal,
-      `raw methods` = file_noext %in% vct_nm_raw,
-      oak.pre       = file_noext %in% vct_nm_oak.pre,
-      `cutpoints`   = file_noext %in% vct_nm_cut,
-      stepcount     = file_noext %in% vct_nm_stp,
-      walmsley      = file_noext %in% vct_nm_wlm,,
-      actinet       = file_noext %in% vct_nm_act,,
-      file          = NULL,
-      file_noext    = NULL
+      GGIR          = fnm_raw %in% vct_nm_ggir,
+      nw.sleep      = fnm_raw %in% vct_nm_nw.sleep,
+      calibration   = fnm_raw %in% vct_nm_cal,
+      `raw methods` = fnm_raw %in% vct_nm_raw,
+      oak.pre       = fnm_raw %in% vct_nm_oak.pre,
+      `cutpoints`   = fnm_raw %in% vct_nm_cut,
+      oxwearables   = fnm_raw %in% vct_nm_ox,
+      # stepcount     = fnm_raw %in% vct_nm_stp,
+      # walmsley      = fnm_raw %in% vct_nm_wlm,,
+      # actinet       = fnm_raw %in% vct_nm_act,,
+      fnm_raw       = NULL
     )
 }
 split_in_seq <- function(x, size) {
@@ -981,68 +1078,129 @@ summarize_metrics_config <- function(df_pipe) {
   ))
 
 }
-summarize_metrics_main <- function(lst_yaml,
-                                   vct_ref,
-                                   vct_merge) {
+metrics_summarizer <- function(df,
+                               le_metric,
+                               le_anchor) {
+  le_divider <- switch(
+    le_anchor,
+    "ANCHOR_DO" = 60,
+    "ANCHOR_RAW" = 3600
+  )
+  le_across_fun <- switch(
+    le_metric,
+    "total"     = {\(x) sum(!is.na(x)) / le_divider},
+    "sedentary" = {\(x) sum(x == "sedentary", na.rm = TRUE) / le_divider},
+    "mvpa"      = {\(x) sum(x == "mvpa", na.rm = TRUE) / le_divider},
+    "steps"     = {\(x) sum(x, na.rm = TRUE)}
+  )
+  if (le_anchor == "ANCHOR_DO") {
+    df_summarized <-
+      df |>
+      summarise(
+        id      = id[1],
+        minutes = if (le_metric == "total") n() / le_divider else NULL,
+        across(
+          .cols = !any_of(c("id", "date", "minutes")),
+          .fns  = le_across_fun
+        )
+      ) |>
+      mutate(across(
+        .cols = !id,
+        .fns = ~formatC(.x, format = "f", digits = 1)
+      ))
+  } else if (le_anchor == "ANCHOR_RAW") {
+    df_summarized <-
+      df |>
+      summarise(
+        id       = id[1],
+        hours    = if (le_metric == "total") n() / le_divider else NULL,
+        non_wear = if (le_metric == "total") sum(invalid) / le_divider else NULL,
+        sleep    = if (le_metric == "total") sum(sleep) / le_divider else NULL,
+        across(
+          .cols = !any_of(c("id", "hours", "non_wear", "sleep")),
+          .fns  = le_across_fun
+        ),
+        .by = date
+      ) |>
+      mutate(across(
+        .cols = !c(id, date),
+        .fns = ~formatC(.x, format = "f", digits = 1)
+      ))
+  }
+  df_summarized[, sort(names(df_summarized))]
+}
+summarize_metrics_main <- function(vct_anchor) {
 
-  lst_sed  <- vector(mode = "list", length(vct_merge))
-  lst_mvpa <- vector(mode = "list", length(vct_merge))
-  lst_step <- vector(mode = "list", length(vct_merge))
+  le_anchor <- stri_extract(vct_anchor[1], regex = "ANCHOR_DO|ANCHOR_RAW")
+  lst_tot_int3 <- vector(mode = "list", length(vct_anchor))
+  lst_tot_step <- vector(mode = "list", length(vct_anchor))
+  lst_sed  <- vector(mode = "list", length(vct_anchor))
+  lst_mvpa <- vector(mode = "list", length(vct_anchor))
+  lst_step <- vector(mode = "list", length(vct_anchor))
 
-  for (i in seq_along(vct_merge)) {
+  for (i in seq_along(vct_anchor)) {
 
-    df_pipe <- read_parquet(vct_merge[i])
-
-    df_sed <-
+    df_pipe <-
+      read_parquet(vct_anchor[i]) |>
+      unite(
+        col = id,
+        any_of(c("site", "pid", "observation")),
+        sep = "_"
+      )
+    lst_tot_int3[[i]] <-
       df_pipe |>
-      select(id, starts_with("intensity3")) |>
+      select(id, date, invalid, sleep, starts_with("intensity3")) |>
       rename_with(.cols = !id,
                   .fn = ~sub(x = .x, pattern = "intensity3_", replacement = "")) |>
-      summarise(id = id[1], across(
-        .cols = !id,
-        .fns = ~sum(.x == "sedentary", na.rm = TRUE) / 60
-      ))
-    lst_sed[[i]] <- df_sed[
-      , c(names(df_sed)[1], sort(names(df_sed[-1])))
-    ]
-    df_mvpa <-
+      metrics_summarizer(le_metric = "total",
+                         le_anchor = le_anchor)
+    lst_tot_step[[i]] <-
       df_pipe |>
-      select(id, starts_with("intensity3")) |>
+      select(id, date, invalid, sleep, starts_with("steps")) |>
+      rename_with(.cols = !id,
+                  .fn = ~sub(x = .x, pattern = "steps_", replacement = "")) |>
+      metrics_summarizer(le_metric = "total",
+                         le_anchor = le_anchor)
+    lst_sed[[i]] <-
+      df_pipe |>
+      select(id, date, starts_with("intensity3")) |>
+      rename_with(.cols = !id,
+                  .fn = ~sub(x = .x, pattern = "intensity3_", replacement = "")) |>
+      metrics_summarizer(le_metric = "sedentary",
+                         le_anchor = le_anchor)
+    lst_mvpa[[i]] <-
+      df_pipe |>
+      select(id, date, starts_with("intensity3")) |>
       rename_with(.cols = !id,
                   .fn = ~sub(x = .x, pattern = "intensity3_", replacement = "")) |>
       select(id, !starts_with("bakrania")) |>
-      summarise(id = id[1], across(
-        .cols = !id,
-        .fns = ~sum(.x == "mvpa", na.rm = TRUE) / 60
-      ))
-    lst_mvpa[[i]] <- df_mvpa[
-      , c(names(df_mvpa)[1], sort(names(df_mvpa[-1])))
-    ]
-    df_step <-
+      metrics_summarizer(le_metric = "mvpa",
+                         le_anchor = le_anchor)
+    lst_step[[i]] <-
       df_pipe |>
-      select(id, starts_with("steps")) |>
+      select(id, date, starts_with("steps")) |>
       rename_with(.cols = !id,
                   .fn = ~sub(x = .x, pattern = "steps_", replacement = "")) |>
-      summarise(id = id[1], across(
-        .cols = !id,
-        .fns = ~sum(.x, na.rm = TRUE)
-      ))
-    lst_step[[i]] <- df_step[
-      , c(names(df_step)[1], sort(names(df_step[-1])))
-    ]
+      metrics_summarizer(le_metric = "steps",
+                         le_anchor = le_anchor)
 
   }
 
-  vct_label_sed <- c(
-    "do"   = if (vct_ref["do"]) "DO" else NULL,
-    "palp" = if (vct_ref["pal"]) "activPAL Epoch" else NULL,
-    "palv" = if (vct_ref["pal"]) "activPAL Event" else NULL,
-    "pass" = if (vct_ref["pass"]) "ActiPass" else NULL,
+  # Create labels ----
+  chk_do   <- "do" %in% names(lst_tot_int3[[1]])
+  chk_img  <- "img" %in% names(lst_tot_int3[[1]])
+  chk_pal  <- "palv" %in% names(lst_tot_int3[[1]])
+  chk_pass <- "pass" %in% names(lst_tot_int3[[1]])
+  vct_label_ref <- c(
+    "do"   = if (chk_do) "DO" else NULL,
+    "img"  = if (chk_img) "Still Image" else NULL,
+    "palp" = if (chk_pal) "activPAL Epoch" else NULL,
+    "palv" = if (chk_pal) "activPAL Event" else NULL,
+    "pass" = if (chk_pass) "ActiPass" else NULL
+  )
+  vct_label_mvpa <- c(
+    vct_label_ref,
     "actinet"               = "Actinet",
-    "bakrania.enmo.average" = "Bakrania (ENMO Avg)",
-    "bakrania.enmo.simple"  = "Bakrania (ENMO Simp)",
-    "bakrania.mad.average"  = "Bakrania (MAD Avg)",
-    "bakrania.mad.simple"   = "Bakrania (MAD Simp)",
     "ellis"                 = "Ellis",
     "esliger"               = "Esliger",
     "fraysee"               = "Fraysee",
@@ -1060,78 +1218,15 @@ summarize_metrics_main <- function(lst_yaml,
     "white.hpfvm.lin"       = "White (HPFVM Linear)",
     "white.hpfvm.pol"       = "White (HPFVM Poly)"
   )
-  tbl_sed <-
-    rbindlist(lst_sed) |>
-    select(
-      id,
-      starts_with("do"),
-      starts_with("pal"),
-      starts_with("pass"),
-      everything()
-    ) |>
-    mutate(
-      # TODO: change when id_pt is implemented in vct_raw/working with UWM data.
-      id = stri_extract(
-        id,
-        regex = paste0(lst_yaml$ref$pal$id_pt, collapse = "|")
-      ),
-      across(
-        .cols = !id,
-        .fns = ~round(.x, digits = 1)
-      )
-    ) |>
-    gt() |>
-    cols_label(.list = vct_label_sed)
-  vct_label_mvpa <- c(
-    "do"   = if (vct_ref["do"]) "DO" else NULL,
-    "palp" = if (vct_ref["pal"]) "activPAL Epoch" else NULL,
-    "palv" = if (vct_ref["pal"]) "activPAL Event" else NULL,
-    "pass" = if (vct_ref["pass"]) "ActiPass" else NULL,
-    "actinet"         = "Actinet",
-    "ellis"           = "Ellis",
-    "esliger"         = "Esliger",
-    "fraysee"         = "Fraysee",
-    "hildebrand"      = "Hildebrand",
-    "ggir"            = "GGIR Default",
-    "mielke"          = "Mielke",
-    "montoye.dt"      = "Montoye (DT)",
-    "montoye.nn"      = "Montoye (NN)",
-    "montoye.rf"      = "Montoye (RF)",
-    "montoye.svm"     = "Montoye (SVM)",
-    "trost"           = "Trost",
-    "walmsley"        = "Walmsley",
-    "white.enmo.lin"  = "White (ENMO Linear)",
-    "white.enmo.pol"  = "White (ENMO Poly)",
-    "white.hpfvm.lin" = "White (HPFVM Linear)",
-    "white.hpfvm.pol" = "White (HPFVM Poly)"
+  vct_label_tot_int3 <- vct_label_sed <- c(
+    vct_label_mvpa,
+    "bakrania.enmo.average" = "Bakrania (ENMO Avg)",
+    "bakrania.enmo.simple"  = "Bakrania (ENMO Simp)",
+    "bakrania.mad.average"  = "Bakrania (MAD Avg)",
+    "bakrania.mad.simple"   = "Bakrania (MAD Simp)"
   )
-  tbl_mvpa <-
-    rbindlist(lst_mvpa) |>
-    select(
-      id,
-      starts_with("do"),
-      starts_with("pal"),
-      starts_with("pass"),
-      everything()
-    ) |>
-    mutate(
-      # TODO: change when id_pt is implemented in vct_raw/working with UWM data.
-      id = stri_extract(
-        id,
-        regex = paste0(lst_yaml$ref$pal$id_pt, collapse = "|")
-      ),
-      across(
-        .cols = !id,
-        .fns = ~round(.x, digits = 1)
-      )
-    ) |>
-    gt() |>
-    cols_label(.list = vct_label_mvpa)
-  vct_label_step <- c(
-    "do"   = if (vct_ref["do"]) "DO" else NULL,
-    "palp" = if (vct_ref["pal"]) "activPAL Epoch" else NULL,
-    "palv" = if (vct_ref["pal"]) "activPAL Event" else NULL,
-    "pass" = if (vct_ref["pass"]) "ActiPass" else NULL,
+  vct_label_tot_step <- vct_label_step <- c(
+    vct_label_ref,
     "oak.1.0"            = "Oak 1.0",
     "oak.pre"            = "Oak Pre",
     "sdt"                = "SDT",
@@ -1140,34 +1235,128 @@ summarize_metrics_main <- function(lst_yaml,
     "verisense.original" = "Verisense (Original)",
     "verisense.revised"  = "Verisense (Revised)"
   )
-  tbl_step <-
-    rbindlist(lst_step) |>
-    select(
-      id,
-      starts_with("do"),
-      starts_with("pal"),
-      starts_with("pass"),
-      everything()
-    ) |>
-    mutate(
-      # TODO: change when id_pt is implemented in vct_raw/working with UWM data.
-      id = stri_extract(
+
+  # gt tables ----
+  list(
+    total_session_int3 =
+      rbindlist(lst_tot_int3) |>
+      select(
         id,
-        regex = paste0(lst_yaml$ref$pal$id_pt, collapse = "|")
-      ),
-      across(
-        .cols = !id,
-        .fns = ~round(.x, digits = 1)
-      )
-    ) |>
-    gt() |>
-    cols_label(.list = vct_label_step)
-
-  # return ----
-  return(list(
-    total_sed = tbl_sed,
-    total_mvpa = tbl_mvpa,
-    total_step = tbl_step
-  ))
-
+        any_of(c("date", "minutes", "hours", "non_wear", "sleep")),
+        starts_with("do"),
+        starts_with("img"),
+        starts_with("pal"),
+        starts_with("pass"),
+        everything()
+      ) |>
+      gt(groupname_col = if (le_anchor == "ANCHOR_RAW") "id" else NULL) |>
+      # TOOO: Test more to make html tables interactive
+      opt_interactive(
+        active = if (le_anchor == "ANCHOR_RAW") TRUE else FALSE,
+        # height = 500,
+        # use_pagination = FALSE
+        use_compact_mode = TRUE
+      ) |>
+      tab_style(
+        style = cell_text(weight = "bold"),
+        locations = cells_row_groups()
+      ) |>
+      cols_label(.list = vct_label_tot_int3),
+    total_session_step =
+      rbindlist(lst_tot_step) |>
+      select(
+        id,
+        any_of(c("date", "minutes", "hours", "non_wear", "sleep")),
+        starts_with("do"),
+        starts_with("img"),
+        starts_with("pal"),
+        starts_with("pass"),
+        everything()
+      ) |>
+      gt(groupname_col = if (le_anchor == "ANCHOR_RAW") "id" else NULL) |>
+      # TOOO: Test more to make html tables interactive
+      opt_interactive(
+        active = if (le_anchor == "ANCHOR_RAW") TRUE else FALSE,
+        # height = 500,
+        # use_pagination = FALSE
+        use_compact_mode = TRUE
+      ) |>
+      tab_style(
+        style = cell_text(weight = "bold"),
+        locations = cells_row_groups()
+      ) |>
+      cols_label(.list = vct_label_tot_step),
+    total_sed =
+      rbindlist(lst_sed) |>
+      select(
+        id,
+        any_of("date"),
+        starts_with("do"),
+        starts_with("img"),
+        starts_with("pal"),
+        starts_with("pass"),
+        everything()
+      ) |>
+      gt(groupname_col = if (le_anchor == "ANCHOR_RAW") "id" else NULL) |>
+      # TOOO: Test more to make html tables interactive
+      opt_interactive(
+        active = if (le_anchor == "ANCHOR_RAW") TRUE else FALSE,
+        # height = 500,
+        # use_pagination = FALSE
+        use_compact_mode = TRUE
+      ) |>
+      tab_style(
+        style = cell_text(weight = "bold"),
+        locations = cells_row_groups()
+      ) |>
+      cols_label(.list = vct_label_sed),
+    total_mvpa =
+      rbindlist(lst_mvpa) |>
+      select(
+        id,
+        any_of("date"),
+        starts_with("do"),
+        starts_with("img"),
+        starts_with("pal"),
+        starts_with("pass"),
+        everything()
+      ) |>
+      gt(groupname_col = if (le_anchor == "ANCHOR_RAW") "id" else NULL) |>
+      # TOOO: Test more to make html tables interactive
+      opt_interactive(
+        active = if (le_anchor == "ANCHOR_RAW") TRUE else FALSE,
+        # height = 500,
+        # use_pagination = FALSE
+        use_compact_mode = TRUE
+      ) |>
+      tab_style(
+        style = cell_text(weight = "bold"),
+        locations = cells_row_groups()
+      ) |>
+      cols_label(.list = vct_label_mvpa),
+    total_step =
+      rbindlist(lst_step) |>
+      select(
+        id,
+        any_of("date"),
+        starts_with("do"),
+        starts_with("img"),
+        starts_with("pal"),
+        starts_with("pass"),
+        everything()
+      ) |>
+      gt(groupname_col = if (le_anchor == "ANCHOR_RAW") "id" else NULL) |>
+      # TOOO: Test more to make html tables interactive
+      opt_interactive(
+        active = if (le_anchor == "ANCHOR_RAW") TRUE else FALSE,
+        # height = 500,
+        # use_pagination = FALSE
+        use_compact_mode = TRUE
+      ) |>
+      tab_style(
+        style = cell_text(weight = "bold"),
+        locations = cells_row_groups()
+      ) |>
+      cols_label(.list = vct_label_step)
+  )
 }

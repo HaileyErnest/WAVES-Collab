@@ -1,6 +1,7 @@
 read_acc_raw <- function(fpa_read,
+                         le_fnm,
                          le_type,
-                         vct_fpa_basic,
+                         vct_basic,
                          dir_cal) {
 
   if (length(fpa_read) == 0) return(NULL)
@@ -8,11 +9,6 @@ read_acc_raw <- function(fpa_read,
   # Read ----
   # Adapted from "readAX_jhm" Sydney group code originally in "features.R".
   # Assuming initials "jhm" stand for jairo migueles, so shout out to him.
-  fnm_sans_ext <-
-    fpa_read |>
-    basename() |>
-    strip_all_ext()
-
   chk_gen <- le_type %in% c(
     "GENEACTIV - CSV w/ HEADER",
     "ADHOC",
@@ -27,15 +23,15 @@ read_acc_raw <- function(fpa_read,
   # Check if file was already created from a previous run of the pipeline.
   fpa_write <- file.path(
     dir_cal,
-    paste0(fnm_sans_ext, ".qs2")
+    paste0(le_fnm, ".qs2")
   )
 
   if (file.exists(fpa_write)) return(fpa_write)
 
   ## GGIR Basic ----
   fpa_basic_match <- grep(
-    x       = vct_fpa_basic,
-    pattern = stringr::str_escape(fnm_sans_ext),
+    x       = vct_basic,
+    pattern = le_fnm,
     value   = TRUE
   )
 

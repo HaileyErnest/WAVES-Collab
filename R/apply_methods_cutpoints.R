@@ -122,10 +122,7 @@ apply_methods_cutpoints <- function(fpa_basic,
   fnm_sans_ext <-
     fpa_basic |>
     basename() |>
-    strip_all_ext() |>
-    sub(x = _,
-        pattern = "meta_",
-        replacement = "")
+    file_path_sans_ext()
   brand <- if (identical(I$monn, "actigraph")) "actigraph" else "other"
 
   # Check if file was already created from a previous run of the pipeline.

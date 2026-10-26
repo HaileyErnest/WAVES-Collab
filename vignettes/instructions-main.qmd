@@ -55,6 +55,10 @@ Please make sure you have defined site-specific parameters within your YAML file
 
 8.  Open "summary_pipeline_main.html" once again and check to see what files have made it through. If all files have made it through, or at least the file's you would've expected to be successfully processed, share the "3_MERGED" folder with WAVES data team, where files within "3_MERGED" will already be renamed with the WAVES-specific ID.
 
+TODO: Have not included metadata within 3_MERGED, have users just send over metadata file beforehand or include in 3_MERGED folder.
+
+TODO: Have a vignette that describes all the errors that can be found from running the main pipeline and further information.
+
 # Notes
 
 - Even if a pipeline finishes successfully, you may see in the console "There were XX warnings (use warnings() to see them)". This is normal if working on an R version that is not 4.5.2., as the messages will be warnings that the packages are meant to work on the latest R version. As long as the R version being used is R 4.4 or beyond, everything should still work. We have not tested the WAVES repository on R versions below 4.4.
