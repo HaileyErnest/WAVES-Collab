@@ -265,6 +265,12 @@ tar_plan(
     name    = fpa_meta_share,
     command = create_meta_share(df_meta, de_id, dir_merged)
   ),
+  if (lst_yaml$de_id) {
+    tar_file(
+      name    = fpa_key,
+      command = create_deid_key(df_meta)
+    )
+  },
   ##%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   ##                                FILE PATHS                              ----
   ##%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

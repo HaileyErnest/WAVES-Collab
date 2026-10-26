@@ -62,6 +62,12 @@ create_meta_share <- function(df_meta,
   }
   return(fpa)
 }
+create_deid_key <- function(df_meta) {
+  fpa <- file.path("reports", "DE_IDENTIFY_KEY.csv")
+  df_meta |>
+    select(site, pid, site_deid, pid_deid) |>
+    fwrite(file = fpa)
+  return(fpa)
 }
 process_meta_ref <- function(lst_chk) {
 
