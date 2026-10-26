@@ -43,10 +43,25 @@ process_meta_sup <- function(meta_fpa,
   return(df)
 
 }
-process_de_id <- function(df_meta) {
-  vct_id <- paste0(df_meta$site_deid, "_", df_meta$pid_deid)
-  names(vct_id) <- paste0(df_meta$site, "_", df_meta$pid)
-  sort(vct_id)
+create_meta_share <- function(df_meta,
+                              de_id,
+                              dir_merged) {
+  fpa <- file.path(dir_merged, "metadata_for_sharing.parquet")
+  if (de_id) {
+    df_meta |>
+      select(
+        site = site_deid,
+        pid  = pid_deid,
+        age:firmware
+      ) |>
+      write_parquet(sink = fpa)
+  } else {
+    df_meta |>
+      select(-c(site_deid, pid_deid)) |>
+      write_parquet(sink = fpa)
+  }
+  return(fpa)
+}
 }
 process_meta_ref <- function(lst_chk) {
 

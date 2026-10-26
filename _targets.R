@@ -261,7 +261,10 @@ tar_plan(
     ),
     format  = "parquet"
   ),
-  vct_de_id = process_de_id(df_meta),
+  tar_file(
+    name    = fpa_meta_share,
+    command = create_meta_share(df_meta, de_id, dir_merged)
+  ),
   ##%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   ##                                FILE PATHS                              ----
   ##%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

@@ -55,8 +55,6 @@ Please make sure you have defined site-specific parameters within your YAML file
 
 8.  Open "summary_pipeline_main.html" once again and check to see what files have made it through. If all files have made it through, or at least the file's you would've expected to be successfully processed, share the "3_MERGED" folder with WAVES data team, where files within "3_MERGED" will already be renamed with the WAVES-specific ID.
 
-TODO: Have not included metadata within 3_MERGED, have users just send over metadata file beforehand or include in 3_MERGED folder.
-
 TODO: Have a vignette that describes all the errors that can be found from running the main pipeline and further information.
 
 # Notes
