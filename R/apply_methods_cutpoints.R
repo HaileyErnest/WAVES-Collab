@@ -283,7 +283,6 @@ apply_methods_cutpoints <- function(fpa_basic,
       )
     ) |>
     reframe(
-      id = fnm_sans_ext,
       datetime = seq.POSIXt(
         from = datetime[1],
         to = last(datetime) + 4,

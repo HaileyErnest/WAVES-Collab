@@ -109,7 +109,6 @@ process_activpal_file <- function(le_id,
       skip   = 12
     ) |>
     mutate(
-      id = le_id,
       # Time variable is number of days since 1899-12-30 but some of the floating
       # point values are ever so slightly smaller than what is printed to the console.
       # 1) Using only first value, change to seconds since 1899-12-30 (multiply by 60 * 60 * 24),
@@ -181,7 +180,6 @@ process_activpal_file <- function(le_id,
       fill   = TRUE
     ) |>
     mutate(
-      id = le_id,
       # Time variable is number of days since 1899-12-30.
       # 1) Change to seconds since 1899-12-30 (multiply by 60 * 60 * 24),
       # 2) convert to POSIXct,
@@ -265,7 +263,7 @@ process_activpal_file <- function(le_id,
   df_pal <- full_join(
     df_epoch,
     df_event,
-    by = join_by(id, datetime)
+    by = join_by(datetime)
   ) |>
     mutate(
       waking_day      = vctrs::vec_fill_missing(waking_day,
@@ -285,7 +283,7 @@ process_activpal_file <- function(le_id,
                                                 direction = "down")
     ) |>
     select(
-      id, datetime, time_palp, time_palv, waking_day,
+      datetime, dttm_palp, dttm_palv, waking_day,
       starts_with("mets"),
       starts_with("intensity3"),
       starts_with("intensity4"),

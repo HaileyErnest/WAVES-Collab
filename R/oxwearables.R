@@ -454,7 +454,6 @@ merge_ox <- function(vct_ox_step,
         by = join_by(datetime)
       ) |>
       mutate(
-        id = le_fnm,
         steps_stepcount = replace_na(steps_stepcount, replace = 0L),
         .before = 1
       ) |>

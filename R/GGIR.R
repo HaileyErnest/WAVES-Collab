@@ -501,17 +501,15 @@ get_nonwear_sleep <- function(fpa_basic,
     # Will be NULL for files that are from direct observation sessions (less than
     # a day). In that case just fill variables with no non-wear and no sleep.
     SLE$output <- data.frame(
-      id                 = le_fnm,
-      datetime           = ymd_hms(M$metashort$timestamp, tz = "UTC"),
-      sleep              = 0L,
-      invalid            = 0L
+      datetime = ymd_hms(M$metashort$timestamp, tz = "UTC"),
+      sleep    = 0L,
+      invalid  = 0L
     )
   } else {
     # Add filename, change time to POSIXct, and have sleep be binary.
     SLE$output <-
       SLE$output |>
       mutate(
-        id = le_fnm,
         datetime =
           as.character(time) |>
           ymd_hms(tz = "UTC"),,

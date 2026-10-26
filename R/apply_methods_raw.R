@@ -502,7 +502,6 @@ apply_methods_raw <- function(fpa_read,
   chunk_start_dttm <- lst_start_tz$start_dttm
   chunk_start_sec  <- lst_start_tz$start_secs
   df_all <- tibble(
-    id = fnm_sans_ext,
     datetime = seq.POSIXt(
       from = lst_start_tz$start_dttm,
       to   = lst_start_tz$start_dttm + ceiling(nrow_data / I$sf) - 1,
@@ -981,7 +980,6 @@ apply_oak.pre <- function(fpa_read,
   # numba <- import("numba")
 
   df_all <- tibble(
-    id = fnm_sans_ext,
     datetime = seq.POSIXt(
       from = lst_start_tz$start_dttm,
       to   = lst_start_tz$start_dttm + ceiling(nrow_data / I$sf) - 1,
