@@ -1,67 +1,3 @@
-summarize_major_steps <- function(vct_raw,
-                                  vct_basic,
-                                  vct_nw.sleep,
-                                  vct_cal,
-                                  vct_out.raw,
-                                  vct_out.oak.pre,
-                                  vct_out.cut,
-                                  vct_ox_step,
-                                  vct_ox_wlms,
-                                  vct_ox_acti) {
-
-  df <- tibble(
-    file       = basename(vct_raw),
-    file_noext = strip_all_ext(file)
-  )
-  vct_nm_ggir <-
-    basename(vct_basic) |>
-    gsub(x = _,
-         pattern = "meta_|\\.RData",
-         replacement = "")
-  vct_nm_nw.sleep <-
-    basename(vct_nw.sleep) |>
-    file_path_sans_ext()
-  vct_nm_cal <-
-    basename(vct_cal) |>
-    file_path_sans_ext()
-  vct_nm_raw <-
-    basename(vct_out.raw) |>
-    file_path_sans_ext()
-  vct_nm_oak.pre <-
-    basename(vct_out.oak.pre) |>
-    file_path_sans_ext()
-  vct_nm_cut <-
-    basename(vct_out.cut) |>
-    file_path_sans_ext()
-  vct_nm_stp <-
-    basename(vct_ox_step) |>
-    gsub(x = _,
-         pattern = "-StepTimes\\.csv\\.gz",
-         replacement = "")
-  vct_nm_wlm <-
-    basename(vct_ox_wlms) |>
-    gsub(x = _,
-         pattern = "-timeSeries\\.csv\\.gz",
-         replacement = "")
-  vct_nm_act <-
-    basename(vct_ox_acti) |>
-    gsub(x = _,
-         pattern = "-timeSeries\\.csv\\.gz",
-         replacement = "")
-  df |>
-    mutate(
-      GGIR          = file %in% vct_nm_ggir,
-      nw.sleep      = file_noext %in% vct_nm_nw.sleep,
-      calibration   = file_noext %in% vct_nm_cal,
-      `raw methods` = file_noext %in% vct_nm_raw,
-      oak.pre       = file_noext %in% vct_nm_oak.pre,
-      `cutpoints`   = file_noext %in% vct_nm_cut,
-      stepcount     = file_noext %in% vct_nm_stp,
-      walmsley      = file_noext %in% vct_nm_wlm,,
-      actinet       = file_noext %in% vct_nm_act,,
-      file_noext    = NULL
-    )
-}
 summarize_reference_steps <- function(df_pid,
                                       spo_pat_raw,
                                       spo_pat_ref,
@@ -162,6 +98,91 @@ summarize_reference_steps <- function(df_pid,
       ActiPass      = if (exists("vct_nm_pass")) {fnm %in% vct_nm_pass} else NULL
     )
 
+}
+summarize_accelerometer_steps_config <- function(df_pid_raw,
+                                                 vct_basic,
+                                                 vct_nw.sleep,
+                                                 vct_cal,
+                                                 vct_out.raw,
+                                                 vct_out.oak.pre,
+                                                 vct_out.cut,
+                                                 # vct_ox_step,
+                                                 # vct_ox_wlms,
+                                                 # vct_ox_acti,
+                                                 vct_ox) {
+
+  vct_cols_fnm_merged <- vct_cols_fnm_raw <- c("site", "pid")
+  df <-
+    df_pid_raw |>
+    select(all_of(c(vct_cols_fnm_merged,vct_cols_fnm_raw))) |>
+    unite(
+      col = id,
+      all_of(vct_cols_fnm_merged),
+      sep = "_",
+      remove =  if (all(vct_cols_fnm_merged == vct_cols_fnm_raw)) FALSE else TRUE
+    ) |>
+    unite(
+      col = fnm_raw,
+      all_of(vct_cols_fnm_raw),
+      sep = "_"
+    )
+  vct_nm_ggir <-
+    basename(vct_basic) |>
+    file_path_sans_ext()
+  vct_nm_nw.sleep <-
+    basename(vct_nw.sleep) |>
+    file_path_sans_ext()
+  vct_nm_cal <-
+    basename(vct_cal) |>
+    file_path_sans_ext()
+  vct_nm_raw <-
+    basename(vct_out.raw) |>
+    file_path_sans_ext()
+  vct_nm_oak.pre <-
+    basename(vct_out.oak.pre) |>
+    file_path_sans_ext()
+  vct_nm_cut <-
+    basename(vct_out.cut) |>
+    file_path_sans_ext()
+  # TODO: Eventually will have to remove the merge_ox (target vct_ox) function.
+  # As of now, if one oxwearable method fails on a file, then that file won't have
+  # an entry in vct_ox (i.e. all oxwearable methods have to work on a file in order
+  # for it to be included in the final merged output). Additionally, the oxwearable
+  # output includes the original filename of the accelerometer file, so it won't
+  # be named in the consistent format of the other accelerometer steps.
+  # So for now, just have an Oxwearables column.
+  vct_nm_ox <-
+    basename(vct_ox) |>
+    file_path_sans_ext()
+  # vct_nm_stp <-
+  #   basename(vct_ox_step) |>
+  #   gsub(x = _,
+  #        pattern = "-StepTimes\\.csv\\.gz",
+  #        replacement = "")
+  # vct_nm_wlm <-
+  #   basename(vct_ox_wlms) |>
+  #   gsub(x = _,
+  #        pattern = "-timeSeries\\.csv\\.gz",
+  #        replacement = "")
+  # vct_nm_act <-
+  #   basename(vct_ox_acti) |>
+  #   gsub(x = _,
+  #        pattern = "-timeSeries\\.csv\\.gz",
+  #        replacement = "")
+  df |>
+    mutate(
+      GGIR          = fnm_raw %in% vct_nm_ggir,
+      nw.sleep      = fnm_raw %in% vct_nm_nw.sleep,
+      calibration   = fnm_raw %in% vct_nm_cal,
+      `raw methods` = fnm_raw %in% vct_nm_raw,
+      oak.pre       = fnm_raw %in% vct_nm_oak.pre,
+      `cutpoints`   = fnm_raw %in% vct_nm_cut,
+      oxwearables   = fnm_raw %in% vct_nm_ox,
+      # stepcount     = fnm_raw %in% vct_nm_stp,
+      # walmsley      = fnm_raw %in% vct_nm_wlm,,
+      # actinet       = fnm_raw %in% vct_nm_act,,
+      fnm_raw       = NULL
+    )
 }
 summarize_accelerometer_steps <- function(de_id,
                                           df_pid,
@@ -466,6 +487,10 @@ make_table_agr.cor <- function(mtx_yours,
 summarize_metrics_config <- function(df_pipe) {
 
   load("data/0_CONFIG/MERGED/WAVES_ALL_TEST.RData")
+
+  df_pipe <-
+    df_pipe |>
+    unite(col = id, site, pid, sep = "_")
 
   # total ----
   # df_nw.sleep
@@ -856,7 +881,7 @@ summarize_metrics_config <- function(df_pipe) {
                 labels = c("sedentary", rep("not sedentary", times = 5))) |>
         as.numeric() - 1)
     ))
-  df_agr <- df_agr[complete.cases(df_agr)]
+  df_agr <- df_agr[complete.cases(df_agr), ]
   nrow_agr <- nrow(df_agr)
   vct_methods <-
     names(df_agr) |>
@@ -895,7 +920,7 @@ summarize_metrics_config <- function(df_pipe) {
                  labels = c(rep("not mvpa", times = 2), "mvpa", rep("not mvpa", times = 3))) |>
             as.numeric() - 1)
     ))
-  df_agr <- df_agr[complete.cases(df_agr)]
+  df_agr <- df_agr[complete.cases(df_agr), ]
   nrow_agr <- nrow(df_agr)
   vct_methods <-
     names(df_agr) |>

@@ -236,6 +236,8 @@ tar_option_set(
 ####                                                                         %%%%
 ####%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 ####%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+lst_yaml = parse_waves_yaml(fpa_yaml = "_waves.yml")
+
 # Start logging.
 if (tar_active()) {
   log_start(
@@ -245,7 +247,6 @@ if (tar_active()) {
 }
 
 tar_plan(
-  lst_yaml = parse_waves_yaml(),
   ##%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   ##                             MINICONDA SETUP                            ----
   ##%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -341,13 +342,34 @@ tar_plan(
   ##%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   ##                                FILE PATHS                              ----
   ##%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-  tar_files(
-    name    = vct_raw,
-    command = lst_yaml$vct_raw_fpa
+  tar_files_input(
+    name  = vct_raw,
+    files = lst_yaml$raw$fpa
   ),
   ##%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-  ##                               DEMOGRAPHICS                             ----
+  ##                               CHECK INPUT                              ----
   ##%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+  tar_parquet(
+    name    = df_pid_raw,
+    command =
+      tibble(
+        site          = "WAVES",
+        pid           = 10002:10006,
+        site_deid     = site,
+        pid_deid      = pid,
+        observation   = NA,
+        meta          = pid,
+        raw           = pid,
+        type_raw      = check_raw_type(vct_raw),
+        fnm_write_raw =
+          vct_raw |>
+          basename() |>
+          sub(x = _,
+              pattern = "_RAW.*",
+              replacement = ""),
+        fpa_raw       = vct_raw
+      )
+  ),
   ##%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   ##                              PROCESS - GGIR                            ----
   ##%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -355,11 +377,9 @@ tar_plan(
   # the csv files can be read successfully with GGIR's `read.myacc.csv` function
   # but somewhere else along Part 1 doesn't like what `read.myacc.csv` outputs
   # or I am specifying an argument wrong.
-  vct_raw_type = config_raw_type(vct_raw),
   tar_files(
     name    = vct_basic,
-    command = wrapper_GGIR_config(vct_raw,
-                                  vct_raw_type)
+    command = wrapper_GGIR_config(df_pid_raw)
   ),
   tar_parquet(
     name    = df_start_tz,
@@ -388,11 +408,8 @@ tar_plan(
   ##%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   ##                           PROCESS - OXWEARABLES                        ----
   ##%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-  vct_ox_input = prepare_ox_input(
-    vct_raw,
-    vct_raw_type,
-    vct_basic
-  ),
+  vct_ox_input = prepare_ox_input(df_pid_raw,
+                                  vct_basic),
   tar_file(
     name    = vct_ox_step,
     command = apply_ox_stepcount(
@@ -435,12 +452,12 @@ tar_plan(
   tar_file(
     name    = vct_ox,
     command = merge_ox(
-      vct_ox_step  = vct_ox_step,
-      vct_ox_wlms  = vct_ox_wlms,
-      vct_ox_acti  = vct_ox_acti,
-      dir_write    = dir_out.ox,
-      vct_raw_type = vct_raw_type,
-      df_start_tz  = df_start_tz
+      vct_ox_step = vct_ox_step,
+      vct_ox_wlms = vct_ox_wlms,
+      vct_ox_acti = vct_ox_acti,
+      dir_write   = dir_out.ox,
+      df_pid_raw  = df_pid_raw,
+      df_start_tz = df_start_tz
     )
   ),
   ##%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -449,12 +466,13 @@ tar_plan(
   tar_file(
     name      = vct_cal,
     command   = read_acc_raw(
-      fpa_read      = vct_raw,
-      le_type       = vct_raw_type,
-      vct_fpa_basic = vct_basic,
-      dir_cal       = dir_cal
+      fpa_read  = df_pid_raw$fpa_raw,
+      le_fnm    = df_pid_raw$fnm_write_raw,
+      le_type   = df_pid_raw$type_raw,
+      vct_basic = vct_basic,
+      dir_cal   = dir_cal
     ),
-    pattern   = map(vct_raw, vct_raw_type),
+    pattern   = map(df_pid_raw),
     iteration = "vector"
   ),
   tar_file(

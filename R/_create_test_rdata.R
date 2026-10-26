@@ -17,7 +17,7 @@ list.files(
        invert  = TRUE) |>
   sapply(FUN = source) |>
   invisible()
-# write_parquet(tar_read(df_pipe), "data/0_CONFIG/MERGED/WAVES_ALL_TEST.parquet")
+# write_parquet(tar_read(df_pipe) |> unite(col = id, site, pid, sep = "_"), "data/0_CONFIG/MERGED/WAVES_ALL_TEST.parquet")
 
 df_test <- read_parquet("data/0_CONFIG/MERGED/WAVES_ALL_TEST.parquet")
 # total -----
@@ -74,7 +74,7 @@ df_test_agr <-
                labels = c("sedentary", rep("not sedentary", times = 5))) |>
           as.numeric() - 1)
   ))
-df_test_agr <- df_test_agr[complete.cases(df_test_agr)]
+df_test_agr <- df_test_agr[complete.cases(df_test_agr), ]
 nrow_agr <- nrow(df_test_agr)
 vct_methods <-
   names(df_test_agr) |>
@@ -113,7 +113,7 @@ df_test_agr <-
                labels = c(rep("not mvpa", times = 2), "mvpa", rep("not mvpa", times = 3))) |>
           as.numeric() - 1)
   ))
-df_test_agr <- df_test_agr[complete.cases(df_test_agr)]
+df_test_agr <- df_test_agr[complete.cases(df_test_agr), ]
 nrow_agr <- nrow(df_test_agr)
 vct_methods <-
   names(df_test_agr) |>

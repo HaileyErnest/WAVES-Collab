@@ -507,6 +507,18 @@ merge_output <- function(de_id,
   return(unlist(lst_fpa_write))
 
 }
+pre_merge_config <- function(fpa) {
+  fpa |>
+    read_parquet() |>
+    mutate(
+      site = "WAVES",
+      pid =
+        basename(fpa) |>
+        stri_extract(regex = "\\d+") |>
+        as.integer(),
+      .before = 1
+    )
+}
 merge_output_config <- function(vct_nw.sleep,
                                 vct_out.raw,
                                 vct_out.oak.pre,
@@ -516,32 +528,31 @@ merge_output_config <- function(vct_nw.sleep,
   # First full join non-wear and sleep with cutpoint as they are both based off
   # M$metashort and can just do a down fill for non-wear/sleep.
   full_join(
-    lapply(vct_out.cut, read_parquet) |>  rbindlist(),
-    lapply(vct_nw.sleep, read_parquet) |>  rbindlist(),
-    by = join_by(datetime)
+    lapply(vct_out.cut, pre_merge_config) |>  rbindlist(),
+    lapply(vct_nw.sleep, pre_merge_config) |>  rbindlist(),
+    by = join_by(site, pid, datetime)
   ) |>
     fill(sleep:invalid,
          .direction = "down") |>
     # out.raw
     left_join(
-      lapply(vct_out.raw, read_parquet) |>
+      lapply(vct_out.raw, pre_merge_config) |>
         rbindlist() |>
         mutate(datetime = as.POSIXct(datetime, tz = "UTC")),
-      by = join_by(datetime)
+      by = join_by(site, pid, datetime)
     ) |>
     # out.oak.pre
     left_join(
-      lapply(vct_out.oak.pre, read_parquet) |>
+      lapply(vct_out.oak.pre, pre_merge_config) |>
         rbindlist() |>
         mutate(datetime = as.POSIXct(datetime, tz = "UTC")),
-      by = join_by(datetime)
+      by = join_by(site, pid, datetime)
     ) |>
     # ox
     left_join(
-      lapply(vct_ox, read_parquet) |>  rbindlist(),
-      by = join_by(datetime)
+      lapply(vct_ox, pre_merge_config) |>  rbindlist(),
+      by = join_by(site, pid, datetime)
     ) |>
-    merge_wrangler() |>
     mutate(
       date =
         with_tz(datetime, tzone = "UTC") |>
@@ -550,6 +561,7 @@ merge_output_config <- function(vct_nw.sleep,
         with_tz(datetime, tzone = "UTC") |>
         format("%H:%M:%S%z"),
       .after = datetime
-    )
+    ) |>
+    merge_wrangler()
 
 }

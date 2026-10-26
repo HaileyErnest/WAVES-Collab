@@ -170,7 +170,8 @@ parse_waves_yaml <- function(fpa_yaml = "_waves.yml") {
   if (identical(Sys.getenv("TAR_PROJECT"), "config")) {
     lst_yaml$my_tz <- "Etc/UTC"
     lst_yaml$sf <- 100
-    lst_yaml$meta <- "DANGEROUS/MANTIPORE.csv"
+    lst_yaml$meta_fpa <- "DANGEROUS/MANTIPORE.csv"
+    lst_yaml$de_id <- FALSE
     lst_yaml$raw$fpa <- file.path(
       "data", "0_CONFIG", "RAW",
       c(
@@ -181,13 +182,7 @@ parse_waves_yaml <- function(fpa_yaml = "_waves.yml") {
         "WAVES_10006_RAW.csv.gz"
       )
     )
-    # TODO: incorporate when testing analysis pipeline, specifically with
-    # WAVES10006 from UWM.
-    # lst_yaml$ref$do <- list(
-    #   fdr = file.path("not", "a", "real", "path"),
-    #   spo_pat = "WAVES00000",
-    #   map_fpa = ""
-    # )
+    lst_yaml$ref$do$fpa <- "CHIMICHANGA/SMACKDOWN.csv"
     return(lst_yaml)
   }
 

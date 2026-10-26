@@ -5,11 +5,10 @@ get_tbl_module <- function(df_module_WAVES,
     sub(x = conda_env,
         pattern = "WAVES_",
         replacement = "")
-  le_primary_module <- case_match(
+  le_primary_module <- replace_values(
     le_primary_module,
     "oak_1.0" ~ "beiwe-forest",
-    "oak_pre" ~ "forest-analysis",
-    .default = le_primary_module
+    "oak_pre" ~ "forest-analysis"
   )
 
   df_module_installed <-

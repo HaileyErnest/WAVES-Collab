@@ -92,16 +92,38 @@ wrapper_GGIR <- function(df_pid_raw) {
 #' @export
 #'
 #' @examples
-wrapper_GGIR_config <- function(vct_raw,
-                                vct_raw_type) {
+wrapper_GGIR_config <- function(df_pid_raw) {
 
-  if (length(vct_raw) == 0) return(NULL)
+  if (nrow(df_pid_raw) == 0) return(NULL)
 
-  successful_raw <- character()
+  # Make regex that collates vct_raw and escapes regex characters.
+  le_regex <-
+    df_pid_raw$fpa_raw |>
+    basename() |>
+    stringr::str_escape() |>
+    paste0(collapse = "|")
 
-  for (i in seq_along(vct_raw)) {
-    fpa_raw <- vct_raw[i]
-    le_type <- vct_raw_type[i]
+  # Check if files were already created from a previous run of the pipeline.
+  vct_basic <- list.files(
+    file.path("data", "0_CONFIG", "GGIR", "output_config", "meta", "basic"),
+    pattern = paste0(df_pid_raw$fnm_write_raw, collapse = "|"),
+    full.names = TRUE
+  )
+  vct_chk_incomplete <- !df_pid_raw$fnm_write_raw %in%
+    (vct_basic |>
+       basename() |>
+       gsub(x = _,
+            pattern = "\\.RData",
+            replacement = ""))
+  vct_fpa_incomplete <- df_pid_raw$fpa_raw[vct_chk_incomplete]
+  vct_type_incomplete <- df_pid_raw$type_raw[vct_chk_incomplete]
+
+  for (i in seq_along(vct_chk_incomplete)) {
+
+    if (!vct_chk_incomplete[i]) next
+
+    fpa_raw   <- vct_fpa_incomplete[i]
+    le_type   <- vct_type_incomplete[i]
 
     chk_csv_type <- c(
       "GENEACTIV - CSV w/ HEADER",
@@ -111,6 +133,7 @@ wrapper_GGIR_config <- function(vct_raw,
 
     if (le_type %in% chk_csv_type) {
       # These are skipped for now
+      vct_chk_incomplete[i] <- FALSE
       next()
     }
 
@@ -139,22 +162,31 @@ wrapper_GGIR_config <- function(vct_raw,
       }
     )
 
-    if (ggir_result) {
-      successful_raw <- c(successful_raw, fpa_raw)
-    }
+    if (!ggir_result) vct_chk_incomplete[i] <- FALSE
   }
 
-  if (length(successful_raw) == 0) {
-    return(character())
+  if (sum(vct_chk_incomplete) == 0) {
+    list.files(
+      file.path("data", "0_CONFIG", "GGIR", "output_config", "meta", "basic"),
+      pattern    = paste0(df_pid_raw$fnm_write_raw, collapse = "|"),
+      full.names = TRUE
+    )
+  } else {
+    # List basic files and rename into consistent site_pid_observation filename.
+    file.rename(
+      from = list.files(
+        file.path("data", "0_CONFIG", "GGIR", "output_config", "meta", "basic"),
+        pattern    = le_regex,
+        full.names = TRUE
+      ),
+      to   = paste0(df_pid_raw$fnm_write_raw[vct_chk_incomplete], ".RData")
+    )
+    list.files(
+      file.path("data", "0_CONFIG", "GGIR", "output_config", "meta", "basic"),
+      pattern    = paste0(df_pid_raw$fnm_write_raw, collapse = "|"),
+      full.names = TRUE
+    )
   }
-
-  list.files(
-    file.path("data", "0_CONFIG", "GGIR", "output_config", "meta", "basic"),
-    pattern =
-      basename(successful_raw) |>
-      paste0(collapse = "|"),
-    full.names = TRUE
-  )
 
 }
 find_timezone_by_offset <- function(offset_hours,
