@@ -135,7 +135,13 @@ Notes:
   - dominant\
     non dominant
   - none (**required**)
-  
+
+- - **firmware**
+  - Version of firmware used to export raw accelerometer data
+  - character (nominal)
+  - \-
+  - \-
+  - allowed
 :::
 
 ## Example
@@ -149,6 +155,7 @@ Notes:
   - device
   - sampling
   - location
+  - firmware
 
 - - CP
   - 101
@@ -158,6 +165,7 @@ Notes:
   - AG3X
   - 30
   - non_dom
+  - v1.9.2
 
 - - CP
   - 102
@@ -167,6 +175,7 @@ Notes:
   - AG3X
   - 30
   - non_dom
+  - v1.9.2
 
 - - CP
   - 107
@@ -176,6 +185,7 @@ Notes:
   - AG3X
   - 30
   - non_dom
+  - v1.9.2
 
 - - CP
   - 111
@@ -185,6 +195,7 @@ Notes:
   - AG3X
   - 30
   - non_dom
+  - v1.9.2
 
 - - CP
   - 112
@@ -194,6 +205,7 @@ Notes:
   - AG3X
   - 30
   - non_dom
+  - v1.9.2
 :::
 
 # Video-Recorded Direct Observation {#ref-do}
