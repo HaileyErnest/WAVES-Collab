@@ -333,7 +333,7 @@ Notes:
 - - []{rowspan=4} **sedtype_do**
   - []{rowspan=4} Sedentary subtype classification
   - []{rowspan=4} character (nominal)
-  - non_sed
+  - non_sedentary
   - All non-sedentary/active behaviors
   - []{rowspan=4} allowed
 
