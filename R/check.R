@@ -523,7 +523,7 @@ check_input_pid <- function(df_meta,
       df_chk_raw |>
       mutate(raw = pid) |>
       select(
-        site,
+        any_of("site"),
         pid,
         any_of("observation"),
         raw,
@@ -584,7 +584,7 @@ check_input_pid <- function(df_meta,
     ) |>
     arrange(pid) |>
     select(
-      site, pid,
+      any_of("site"), pid,
       site_deid, pid_deid,
       any_of("observation"),
       meta, raw, all_of(vct_ref),
@@ -634,7 +634,7 @@ check_input_pid <- function(df_meta,
       df_na |>
       dplyr::filter(vct_filter) |>
       select(
-        site, pid, any_of("observation"),
+        any_of("site"), pid, any_of("observation"),
         meta, raw, all_of(vct_ref)
       ) |>
       mutate(across(
