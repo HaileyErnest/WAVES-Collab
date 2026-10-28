@@ -316,7 +316,12 @@ extract_pal_header <- function(fpa) {
   lst_header$analysis_algorithm_minimum_non_upright_seconds <- as.integer(
     lst_header$analysis_algorithm_minimum_non_upright_seconds
   )
-  lst_header$serial <- stri_extract(basename(fpa), regex = "AP\\d{6}")
+  lst_header$serial <-
+    basename(fpa) |>
+    stri_extract(regex = "AP\\d{6}") |>
+    # Not all activPAL files will have the serial number in the filename. We don't
+    # want an NA for future functions.
+    stri_na2empty()
   return(lst_header)
 }
 process_meta_ap <- function(spo,
